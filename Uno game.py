@@ -48,6 +48,26 @@ class Card():
     def __str__(self):  #what the user sees
         return f"{self.color} {self.value}" if self.color else self.value
 
+class Player:   #player initalized and methods (what each player does in the game) 
+    def __init__(self, name, is_human=True):
+        self.name = name
+        self.is_human = is_human #assume true 
+        self.hand = []
+        self.declared_uno = False   #assume false
+    
+    def draw_cards(self, deck, num=7):  
+        for c in range(num):
+            if deck:
+                self.hand.append(deck.pop())
+    
+    def declare_uno(self):
+        self.declared_uno = True
+        print(f"{self.name} said Uno!")
+    
+    def reset_uno(self):
+        self.declare_uno = False 
+
+    
 def generate_deck():    #random deck for the player 
     colors = ["red", "yellow", "green", "blue"]
     values = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "skip", "reverse", "+2"]
@@ -218,7 +238,7 @@ def check_win(player_hand):    #check if a player has 0 cards
     if len(player_hand) == 0:
         return True 
 
-def valid_win(player, player_hand, is_human=True, player_status=None):
+def valid_win(player, player_hand, deck, is_human=True, player_status):
     #player is a string. Show either Player's name or Computer (if that's the player)
     if player_status is None:
         player_status = {"declared_uno": False}
@@ -232,7 +252,6 @@ def valid_win(player, player_hand, is_human=True, player_status=None):
     
     if len(player_hand) == 1:
         if player_status.get('declared_uno', False):    #check if uno was declared. valid ONLY if declared
-            player_hand.extend[(deck.pop(), deck.pop())]
             return False, True  #they didn't win, BUT they HAVE UNO
     
         if is_human:
@@ -242,7 +261,6 @@ def valid_win(player, player_hand, is_human=True, player_status=None):
                 print("You declared UNO! Valid!")
                 return False, True #DIDN'T win, but declared uno
             else:
-                player_status['declared_uno'] = False 
                 print("you forgot to declare Uno. Pick up 2 cards! ...")
                 player_hand.extend([deck.pop(), deck.pop()])
                 return False, False 
@@ -286,8 +304,6 @@ def main():
     pile = []
 
     #distribute cards
-
-
     pile.append(deck.pop())
 
     running = True #game starts
@@ -324,6 +340,8 @@ def main():
             screen.blit(card_back_img, (x, y))
         
         check_deck(deck)
+        player_status = {"declared_uno": False}
+        computer_status = {"declared uno": False}
         
         if turn == 0:
             print("\nYour turn!")
@@ -347,7 +365,7 @@ def main():
                     player1_deck.extend([deck.pop(), deck.pop()])
                 
                 #computer have uno?
-                win, uno = valid_win("Python", computer_deck, is_human=False, player_status=None)
+                win, uno = valid_win("Python", computer_deck, is_human=False, player_status=computer_status)
                 if win:
                     print("Computer won!")
                     running = False
