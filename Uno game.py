@@ -11,94 +11,95 @@ if not pygame.mixer:
 
 from collections import Counter 
 
+BASE_DIR = os.pat.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(BASE_DIR, "images")   
+
+#load images
+def load_image_by_name(name, size=None):
+    for ext in (".png", ".jpg", ".jpeg"):
+        path = os.path.join(IMAGES_DIR, name + ext)
+        if os.path.exists(path):
+            surf = pygame.image.load(path).convert_alpha()
+        if size:
+            surf = pygame.transform.smoothscale(surf, size)
+        return surf 
+    return None #image is none if image is missng 
+
+
 #class for ALL card properties 
 class Card():
     def __init__(self, color, value):   #initalize card and their images
         self.color = color
         self.value = value 
+        base = f"{self.color}_{self.value}" if self.color != "wild" else f"wild_{self.value}"
+        img = load_image_by_name(base, size=(80, 120))
+        if img is None:
+            print(f"Image not found for {base}")
         self.image = self.load_image()
-
-    def load_image(self):   #load the images
-        base_name = f"{self.color}_{self.value}" 
-        if self.color != "wild":    #normal cards
-            base_name = f"{self.color}_{self.value}" 
-        else:    #wild card value exception for +4 and plain wild
-            base_name = f"wild_{self.value}"
-
-        #both file types
-        possible_extensions = [".png", ".jpg"]
-        for extension in possible_extensions:
-            path = os.path.join("images", base_name + extension)
-            if os.path.exists(path):
-                return  pygame.image.load(path)
-
-        print(f"Image not found for {base_name}")
-        return None 
 
     def draw(self, screen, x, y):   #draw cards for the player 
         screen.blit(self.image, (x, y))
     
     def is_match(self, other_card): #check if the player's card can be placed down
-        if self.color == other_card.color:
-            return True 
-        if self.value == other_card.value:
-            return True 
-        return False
+        if other is None:
+            return None 
+        return (self.color == other.color) or (self.value == other.value)
     
     def __str__(self):  #what the user sees
         return f"{self.color} {self.value}" if self.color else self.value
-
-def generate_deck():    #random deck for the player 
-    colors = ["red", "yellow", "green", "blue"]
-    values = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "skip", "reverse", "+2"]
-    wilds = ["wild", "+4"]
     
-    deck = []
-    for color in colors:
-        for value in values[0:9]:
-            deck.append(Card(color, value))
-            if value != 0:
-                deck.append(Card(color, value))
+    def __repr__(self):
+        return f"Card({self.color!r}, {self.value!r})"
+        print(player.hand)
+
+class player(): #integrating player class to make data easier to store / call 
+    def __init__(self, name, is_human=True):
+        self.name = name
+        self.is_human = is_human
+        self.hand = []
+        self.declared_uno = False   #assume unless otherwise declared later
+
+    def draw_cards(self, deck, num=7):
+        for c in range(num):
+            if deck:
+                self.hand.append(deck.pop())
+            else:
+                break 
     
-    for _ in range(4):
-        deck.append(Card("wild", "+4"))
-        deck.append(Card("wild", "wild"))
-    
-    return deck 
+    def reset_uno(self):   #reset the game
+        self.declared_uno = False 
 
-def check_deck(deck):
-    print(f"Total cards: {len(deck)}")
+    def valid_win(self):
+        if len(self.hand) > 1:
+            self.declared_uno = False 
+            return False, False #(won, has uno)
+        
+        #player wins
+        if len(self.hand) == 0:
+            print(f"{self.name} won the game.")
+            return True, False 
+        
+        if len(self.hand) == 1:
+            if self.is_human:
+                response = input(f"{self.name}, declare 'uno' to avoid penalty").strip().lower()
+                if response == "uno":
+                    self.declared_uno = True 
+                    return False, True 
+                else:
+                    print("Draw 2 cards. ")
+                    self.draw_cards(deck, 2)
+                    return False, False 
+            
+            else:   #computer is called
+                print(f"{self.name} declared uno!")
+                self.declared_uno = True    #automatic
+                return False, True
 
-    card_count = Counter((card.color, card.value) for card in deck)
-
-    for card, count in sorted(card_count.items()):
-        print(f"{card}: {count}") 
-
-def shuffle_deck(deck): #shuffle deck before new game 
-    shuffled_deck = random.shuffle(deck) 
-    return shuffled_deck 
-
-def reshuffle_pile_into_deck(pile, deck):
-    if len(pile) <= 1:
-        return None 
-    
-    top_card = pile.pop()   #save the top card for next player's reference
-    deck.extend(pile)
-    pile.clear()
-
-    reshuffled_cards = random.shuffle(deck) #shuffle
-    deck.extend(reshuffled_cards)    #shuffled cards are the new deck
-
-def distribute_cards(hand, num_players=2): #pass 7 cards to players
-    deck = generate_deck() #build the deck
-    shuffle_deck(deck)   #shuffle 
-    for _ in range(num_players):
-        if deck:
-            hand.append(deck.pop())
-        else:
-            print("Deck is empty. Can't deal more cards!")
-
-    return hand
+class deck():   #deck object
+    def __init__(self, color, value, is_wild = False):
+        self.color = color 
+        self.value = value 
+        self.is_value = value 
 
 def card_penalty_value(card):
     if card.value == "+2":
@@ -133,93 +134,158 @@ def apply_special_card_effects(card, turn, pending_draw):
         return pending_draw + 4
     return pending_draw
 
-def draw_until_playable(player_hand, pile, deck, turn, pending_draw, max_draws=50):   #keep drawing cards until a match is found
+def draw_until_playable(player, pile, deck, turn, pending_draw, max_draw=50):
+    drawn_card = deck.pop()
     draws = 0
-    top_card = pile[-1]
+    top_card = pile[-1] 
 
-    while True:
-        for card in list(player_hand):
-            if (pending_draw > 0 and is_valid_stack(card, top_card, pending_draw)) or (pending_draw == 0 and Card.is_match(card, top_card)):
-                player_hand.remove(card)
+    while draws < max_draws: 
+        for card in list(player.hand):
+            if (pending_draw > 0 and is_valid_stack(card, top_card, pending_draw) or (pending_draw==0 and Card.is_match(card, top_card))):
+                player.hand.remove(card)
                 pile.append(card)
                 return apply_special_card_effects(card, turn, pending_draw)
-        
-        if draws >= max_draws:  #limit to drawing
-            print("Max drawing limit reached! Next player's turn")
-            break 
-        
-        if len(deck) == 0:
-            print("Deck empty. Reshuffling now...")
-            top_card = pile.pop()
-            deck.extend(pile)
-            pile.clear()
-            random.shuffle(deck) 
-        
-        drawn_card = deck.pop()
-        player_hand.append(drawn_card)
-        draws+=1 
-        print("New card was drawn: {drawn_card}") 
-
-        if (pending_draw > 0 and is_valid_stack(drawn_card, top_card, pending_draw)) or pending_draw == 0 and Card.is_match(drawn_card, top_card):
-            player_hand.remove(drawn_card)
-            pile.append(drawn_card)                                                                         
-            return apply_special_card_effects(drawn_card, turn, pending_draw=0)
-
-def check_win(player_hand):    #check if a player has 0 cards
-    if len(player_hand) == 0:
-        return True 
-
-def valid_win(player, player_hand, is_human=True, player_status=None):
-    #player is a string. Show either Player's name or Computer (if that's the player)
-    if player_status is None:
-        player_status = {"declared_uno": False}
+        draws += 1
     
-    if len(player_hand) > 1:    #reset declared uno to false if they have more than 1 card
-        player_status['declared_uno'] = False 
-        return False, False #return false => they DIDN'T win, NO uno 
+    if draws >= max_draw:
+        print("Max drawings is reached.") 
 
-    if len(player_hand) == 0:   #check if the player has no cards left
-        return True, False    #they DID WIN, NO uno!
+    if not deck:
+        print("deck empty. reshuffling!")
+        reshuffle_pile_into_deck(pile, deck)
     
-    if len(player_hand) == 1:
-        if player_status.get('declared_uno', False):    #check if uno was declared. valid ONLY if declared
-            player_hand.extend[(deck.pop(), deck.pop())]
-            return False, True  #they didn't win, BUT they HAVE UNO
+    drawn_card = deck.pop()
+    player.hand.append(drawn_card)
+    draws += 1
+    print(f"{player.name} drew a card: {drawn_card}")
     
-        if is_human:
-            resp = input(f"{player}, you have 1 card left. Type 'Uno' to declare Uno: ").strip().lower()
-            if resp.lower() == "uno":
-                player_status['declared_uno'] = True #if they say Uno, declared is True
-                print("You declared UNO! Valid!")
-                return False, True #DIDN'T win, but declared uno
+    if (pending_draw > 0 and is_valid_stack(drawn_card, top_card, pending_draw) or (pending_draw == 0 and Card.is_match(drawn_card, top_card))):
+        player.hand.remove(drawn_card)  #choosen card
+        pile.append(drawn_card)
+        return apply_special_card_effects(drawn_card, turn, pending_draw=0)
+
+def generate_deck():    #random deck for the player 
+    colors = ["red", "yellow", "green", "blue"]
+    values = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "skip", "reverse", "+2"]
+    deck = []
+    for color in colors:
+        deck.append(Card(color, "0"))   #add 2 0s
+        for value in values[1:9]:   
+            deck.append(Card(color, value))
+            deck.append(Card(color, value))
+
+    for _ in range(4):  #wild cards
+        deck.append(Card("wild", "+4"))
+        deck.append(Card("wild", "wild"))
+    
+    random.shuffle(deck)  
+    return deck 
+
+def check_deck(deck):
+    print(f"Total cards: {len(deck)}")
+
+    card_count = Counter((card.color, card.value) for card in deck)
+
+    for card, count in sorted(card_count.items()):
+        print(f"{card}: {count}") 
+
+def shuffle_deck(deck): #shuffle deck before new game 
+    shuffled_deck = random.shuffle(deck) 
+    return shuffled_deck 
+
+def reshuffle_pile_into_deck(pile, deck):
+    if len(pile) <= 1:
+        return None 
+    
+    top_card = pile.pop()   #save the top card for next player's reference
+    deck.extend(pile)
+    pile.clear()
+
+    reshuffled_cards = random.shuffle(deck) #shuffle
+    deck.extend(reshuffled_cards)    #shuffled cards are the new deck
+
+def draw_hand(screen, hand, x, y, card_spacing, card_back_surf, show_face=True):
+    rects = []
+    for i, card in enumerate(hand):
+        card_x = x + i * card_spacing 
+        card_y = y
+        if show_face and card.image:
+            screenblit(card.image, (card_x, card_y))
+            rect = pygame.Rect(card_x, card_y, card.image.get_width(), card.image.get_height())
+        else: 
+            if card_back_surf:
+                screen.blit(card_back,_surf, (card_x, card_y))
+                rect = pygame.Rect(card_x, card_y, card_back_surf.get_width(), card_back_surf.get_height()) #image of opposing player's hand
             else:
-                player_status['declared_uno'] = False 
-                print("you forgot to declare Uno. Pick up 2 cards! ...")
-                player_hand.extend([deck.pop(), deck.pop()])
-                return False, False 
-        else:   
-            #computer portion 
-            print(f"{player} said: UNO!")
-            player_status['declared_uno'] = True 
-            return False, True 
-    
-    return False, False 
+                rect = pygame.Rect(card_x, card_y, 80, 120)
+            rects.append(rect)
+        return rects 
 
-def animate_cards(screen, start_x, start_y, end_x, end_y, cardBack_img, TABLE_GREEN, deck_x, deck_y):  #graphics
-    steps = 20
-    for i in range(steps):
-        t = i / steps 
-        new_x = start_x + (end_x - start_x) * t
-        new_y = start_y + (end_y - start_y) * t
-        screen.fill(TABLE_GREEN)
-        screen.blit(sharedDeck_img, (deck_x, deck_y))
-        screen.blit(cardBack_img, (new_x, new_y))
-        pygame.display.flip()
-        pygame.time.delay(15)
+def draw_pile(screen, pile, center):
+    if not pile:
+        return 
+    
+    top = pile[-1]  #access top of (pile where players put cards)
+    if top.image:
+        w, h = top.image.get_size()
+        rect = top.image.get_rect(center=center)
+        screen.blit(top.image, rect)
+    else:
+        r = pygame.Rect(center[0]-40, center[1]-60, 80, 120)
+        pyganme.draw.rect(screen, (200, 200, 200), r)
+    
+    if pile:    #draw the pile
+        top_card = pile[-1]
+        top_rect = top_card.image.rect(center=(400, 300))
+        screen.blit(top_card.image, top_rect)
+
+def animate_card(screen, image_surf, start_pos, end_pos, draw_frame_cb , steps=20, delay_ms=15):
+    sx, sy = start_pos 
+    ex, ey = end_pos 
+
+    for i in range(1, steps+1):
+        t = i/steps 
+        x = sx + (ex - sx) * t 
+        y = sy + (ey - sy) * t 
+        draw_frame_cb(screen) #draw the board + hands 
+        if image_surf:
+            screen.blit(image_surf, (x,y))
+        
+        pygame.displayflip()
+        pygame.time.delay(delay_ms)
+
+#testing logic to distribute cards 
+def distribute_cards_logic(deck, num_cards=7):
+    hand = []
+    for i in range(num_cards):
+        if deck:
+            hand.append(deck.pop())
+    return hand 
+
+def deal_cards(deck, players, num_cards=7):
+    for _ in range(num_cards):
+        for player in players:
+            if deck:
+                player.hand.append(deck.pop())
+
+def deal_cards_with_animation(screen, deck, player, computer, deck_pos, card_back, draw_frame_cb, spacing = 30):
+    for i in range(7):
+        card = deck.pop()  #logic based function covers these
+        player.hand.append(card)
+
+        end_pos = (100 + i * spacing, 500)
+        animate_card(screen, card.image, deck_pos, end_pos, draw_frame_cb)
+
+        card = deck.pop()
+        computer.hand.append(card)
+
+        end_pos = (100 + i * spacing, 50)
+        animate_card(screen, card_back, deck_pos, end_pos, draw_frame_cb)
 
 def main():
     #game setup
     pygame.init()
+    screen = pygame.display.set_mode((900, 650))
     pygame.display.set_caption("Welcome to UNO with the computer!!!")
     clock = pygame.time.Clock()
 
@@ -227,199 +293,94 @@ def main():
     TABLE_GREEN = (34, 139, 34)
 
     #images
-    sharedDeck_img = pygame.image.load("images/card_back_img.png")
-    sharedDeck_img = pygame.transform.scale(sharedDeck_img, (80, 120))
-
+    card_back_surf = load_image_by_name("card back", size=(980, 120)) or pygame.Surface((80,120))
+    shared_deck_surf = load_image_by_name("shared_deck", size=(80, 120)) or card_back_surf
+    
     deck = generate_deck()
-    random.shuffle(deck) 
+    player = Player("you", is_human=True)
+    computer = Player("Python", is_human=False)
 
-    #place the deck in the middle
-    deck_x, deck_y = 350, 225
-    pile_x, pile_y = 500, 250 
+    shared_pos = (400, 260)
+    #draw the frame
+    def draw_frame(surf):
+        surf.fill(TABLE_GREEN)
+        surf.blit(shared_deck_surf, (shared_pos[0]-120, shared_pos[1]-20))  #deck, left of center
+        surf.blit(surf, pile, center=(shared_pos[0], shared_pos[1]))
+        draw_pile(surf, pile, center=(shared_pos[0], shared_pos[1]))
+        
+        draw_hand(surf, player.hand, 50, 500, 30, card_back_surf, show_face=True)
+        draw_hand(surf, computer.hand, 50, 50, 30, card_back_surf, show_face=False)
 
-    player1_deck = []
-    computer_deck = []
-    pile = []
-
-    #distribute cards
-    for i in range(7):
-        card = deck.pop()
-        player1_deck.append(card)
-        animate_cards(screen, deck_x, deck_y, 50 + i * 30, 500, card.image, sharedDeck_img, TABLE_GREEN, deck_x, deck_y)
-
-        card = deck.pop()
-        computer_deck.append(card)
-        animate_cards(screen, deck_x, deck_y, 50 + i * 30, 50, card.image,sharedDeck_img, TABLE_GREEN, deck_x, deck_y)
-
-    pile.append(deck.pop())
-
-    running = True 
-
+    deal_cards_animation(screen, deck, player, computer, card_back_surf, (shared_pos[0]-120, shared_pos[1]-20), player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), draw_frame_cb=draw_frame, card_spacing=30)
+    if deck:
+        pile.append(deck.pop())
+    
+    running = True
     turn = 0
-    num_players = 2
-    first_player = input("Do you want to go first or should the computer go first? Type yes if you want to go: ")
-    if first_player == "yes":
-        player1_turn = True 
-        print("Your turn!")
-    else:
-        turn = 1
-        player1_turn = False 
-        print("Computer starts now")
-
+    pending_draw = 0
     while running:
-        screen.fill(TABLE_GREEN)
-        
-        card_rects = [] #reset after EVERY turn
-
-        for index, card in enumerate(player1_deck): #draw player 1 deck
-            x = 50 + index*30
-            y = 500 
-            card_image = card_image.get(str(card),  None) 
-            if card_image:
-                screen.blit(card_image, (x,y))
-            
-            rect = pygame.Rect(x, y, 80, 120)
-            card_rects.append((rect, card))
-        
-        for index, card in enumerate(computer_deck):    #draw computer deck
-            x = 50 + index * 30
-            y = 50 
-            screen.blit(card_back_img, (x, y))
-
-        if pile:    #draw the pile
-            top_card = pile[-1]
-            top_rect = top_card.image.rect(center=(400, 300))
-            screen.blit(top_card.image, top_rect)
-        
-        check_deck(deck)
-        
-        if turn == 0:
-            print("\nYour turn!")
+        draw_frame(screen)#set the game up
+        pygame.display.flip()
+        clock.tick(30)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
             #player's turn
-            if turn%num_players == 0: 
-                 #player have uno?
-            
-                win, uno = valid_win("You", player1_deck, is_human=True, player_status=player_status)
-                if win:
-                    print("You won UNO!")
-                    running = False 
-                    break 
-                
-                if len(player1_deck) == 1 and not uno:
-                    print("You forgot to declare Uno. Draw 2 cards. ")
-                    player1_deck.extend([deck.pop(), deck.pop()])
-                
-                #computer have uno?
-                win, uno = valid_win("Python", computer_deck, is_human=False, player_status=None)
-                if win:
-                    print("Computer won!")
-                    running = False
-                    break 
-                if len(computer_deck) == 1 and not uno:
-                    print("Computer forgot to declare uno.")
-                    computer_deck.extend([deck.pop(), deck.pop()])
-
-                if event.type == pygame.QUIT:   #quit game
-                    running = False
-                
-                elif event.type == pygame.MOUSEBUTTONDOWN:    #start the game 
+            if turn%2 == 0: 
+                if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = event.pos 
-            
-                    for idx, rect in enumerate(card_rects): #player cards
-                        if rect.collidepoint(mouse_pos):    #event 
-                            choosen_card = player1_deck[idx]
-                            top_card = pile[-1]
+                    rects = draw_hand(screen, player.hand, 50, 500, 30, card_back_surf, show_face=True)
+                    for idx, r in enumerate(rects):
+                        if r.collidepoint(mouse_pos):
+                            chosen = player.hand[idx]
+                            top = pile[-1] if pile else None 
 
-                            if pending_draw > 0:
-                                if is_valid_stack(choosen_card, top_card, pending_draw):
-                                    pile.append(player1_deck.pop(idx))  #add the choosen card to the pile
-                                    pending_draw += card_penalty_value(choosen_card)    #draw cards based on penalty value
-                                    print("Stacked! Draw {pending_draw} cards")
-                                else:
-                                    print("Invalid stack. Drawing cards now...")
-                                    draw_until_playable(player1_deck, pile, deck, turn, pending_draw)
-                                    pending_draw = 0
-                            
-                            else: 
-                            #normal stack 
-                                if Card.is_match(choosen_card, top_card):
-                                    pile.append(player1_deck.pop(idx))
-                                    pending_draw = apply_special_card_effects(card, turn, pending_draw)
-                                else: 
-                                    print("Invalid. Choose a card w/ the same color or value! ")
-                turn += 1        
-            else: 
-                #player have uno?
-                win, uno = valid_win("You", player1_deck, is_human=True, player_status=player_status)
-                if win:
-                    print("You won UNO!")
-                    running = False 
-                    break 
-                if len(player1_deck) == 1 and not uno:
-                    print("You forgot to declare Uno. Draw 2 cards. ")
-                    player1_deck.extend([deck.pop(), deck.pop()])
-                
-                #computer have uno?
-                win, uno = valid_win("Python", computer_deck, is_human=False, player_status=None)
-                if win:
-                    print("Computer won!")
-                    running = False
-                    break 
-                if len(computer_deck) == 1 and not uno:
-                    print("Computer forgot to declare uno.")
-                    computer_deck.extend([deck.pop(), deck.pop()])
-                
-                #computer's turn
-                pygame.time.delay(500)  #pause for suspense and realism 
-                playable = []
-                top_card = pile[-1]
+                            if (pending_draw > 0 and is_valid_stack(chosen, top, pending_draw)) or (pending_draw=0 and chosen.is_match(top)):
+                                player.hand.pop(idx)
+                                pile.append(chosen)
 
-                #strategy => save the +2 and +4 for later. ONLY place a +2 when needed. 
-                if pending_draw > 0:
-                    for c in computer_deck: #loop through deck for penalty cards
-                        if is_valid_stack(c, top_card, pending_draw):
-                            choosen_card = c 
+                                pending_draw = apply_special_card_effects(chosen, turn, pending_draw) or pending_draw   #update the pending draw and turn
+                                turn += 1
+                            else:
+                                print("Invalid move")
+            else:
+                pygame.time.delay(400)
+                top = pile[-1] if pile else None 
+                played = False 
+                for c in computer.hand:
+                    if pending_draw == 0 and c.value not in ["+2", "+4"] and c.is_match(top):
+                        computer.hand.remove(c) #remove card
+                        pending_draw = apply_special_card_effects(c, turn, pending_draw) or pending_draw
+                        played = True 
+                        beak 
+                        
+                if not played and pending_draw>0:
+                    for c in computer.hand:
+                        if is_valid_stack(c, top, pending_draw):
+                            computer.hand.remove(c)
+                            pile.append(c)
+                            pending_draw = apply_special_card_effects(c, turn, pending_draw) or pending_draw
+                            played = True 
                             break 
-                    
-                    if choosen_card:
-                        pile.append(computer_deck.pop(choosen_card))
-                        pending_draw = apply_special_card_effects(choosen_card, turn, pending_draw)
-                    else:
-                        print("Computer can't stack. Drawing cards now...")
-                        pending_draw = 0
-                else:
-                    #no penalty for computer
-                    for c in computer_deck:
-                        if Card.is_match(c, top_card):
-                            if c.value not in ["+2", "+4"]: #save the penalty card unless needed
-                                choosen_card = c
-                                break 
-                            
-                    if not choosen_card:
-                            for c in computer_deck:
-                                if Card.is_match(c, top_card) and c.value == "+2":  #save +2
-                                    choosen_card = c
-                                    break 
-
-                                if Card.is_match(c, top_card) and c.value == "+4":  #save +4
-                                    choosen_card = c 
-                                    break 
-                    
-                    if choosen_card:
-                        computer_deck.remove(choosen_card)
-                        pile.append(choosen_card)
-                        pending_draw = apply_special_card_effects(choosen_card, turn, pending_draw)
-                    else:
-                        draw_until_playable(computer_deck, pile, deck) 
-
+                
+                if not played:
+                    draw_until_playable(computer, pile, deck, turn, pending_draw)
                 turn += 1
+        w, uno = player.valid_win()
+        if w:
+            print("you won!")
+            running = False     #break the loop b/c player won
+            break 
 
-        pygame.display.flip() 
+        w2, uno = computer.valid_win()
+        if w:
+            print("Computer won")
+            running = False
+            break 
+    pygame.quit()
 
 if __name__ == "__main__":
     main()
+
