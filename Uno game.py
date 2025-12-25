@@ -375,7 +375,7 @@ def main():
             break 
 
         w2, uno = computer.valid_win()
-        if w:
+        if w2:
             print("Computer won")
             running = False
             break 
@@ -383,4 +383,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
