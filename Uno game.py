@@ -406,8 +406,8 @@ def main():
         pos_x = screen.get_width() // 2 - text_surf.get_width()//2
         pos_y = 20
         
-        screen.blit(text_surf, (pos_x, pos_y)
-        
+        screen.blit(text_surf, (pos_x, pos_y))
+    
 
     first_rect = pygame.Rect(260, 250, 180, 60)
     comp_rect = pygame.Rect(260, 330, 180, 60)
@@ -549,4 +549,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
