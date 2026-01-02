@@ -49,22 +49,20 @@ def draw_color_buttons(screen, font):
 
     return buttons
 
-def wait_for_click(button_data):
+def check_button_click(event, button_data):
+    if event.type != pygame.MOUSEBUTTONDOWN:
+        return None 
+    mx, my = event.pos
     if isinstance(button_data, dict):
         items = button_data.items()
     else:
         items = button_data 
     
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                raise SystemExit
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
-                for result, rect in items:
-                    if rect.collidepoint(mx, my):
-                        return result 
+    for result, rect in items:
+        if rect.collidepoint(mx, my):
+            return result 
+    
+    return None 
 
 #class for ALL card properties 
 class Card():
@@ -109,45 +107,17 @@ class Player(): #integrating player class to make data easier to store / call
     def reset_uno(self):   #reset the game
         self.declared_uno = False 
 
-    def valid_win(self, screen, font, deck):
-        if len(self.hand) > 1:
-            self.declared_uno = False 
-            return False, False #(won, has uno)
-        
+    def valid_win(self):
         #player wins
         if len(self.hand) == 0:
-            print(f"{self.name} won the game.")
-            return True, False 
-        
+            return "win"
+
         if len(self.hand) == 1:
-            if self.is_human:
-                uno_rect = pygame.Rect(350, 300, 120, 50)
-                skip_rect = pygame.Rect(350, 360, 120, 50)  
+            if not self.declared_uno:
+                return "needs_uno"
 
-                draw_button(screen, uno_rect, "UNO!", font, (255, 0, 0), (255, 255, 255))
-                draw_button(screen, skip_rect, "SKIP", font, (100, 100, 100), (255, 255, 255))
-
-                pygame.display.flip()
-
-                result = wait_for_click([(uno_rect, "uno"), (skip_rect, "skip")])
-
-                if result == "uno":
-                    self.declared_uno = True 
-                    return False, True 
-                elif result == "skip":
-                    self.draw_cards(deck, 2)
-                    return False, False 
-                else:
-                    print("Draw 2 cards. ")
-                    self.draw_cards(deck, 2)
-                    return False, False 
+        return "ok" 
             
-            else:   #computer is called
-                print(f"{self.name} declared uno!")
-                self.declared_uno = True    #automatic
-                return False, True
-            
-
 class deck():   #deck object
     def __init__(self, color, value, is_wild = False):
         self.color = color 
@@ -230,7 +200,7 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, max_draw=50):
 def is_move_valid(card, top_card,pending_draw):
     if pending_draw > 0:
         return is_valid_stack(card, top_card, pending_draw)
-    return card.is_match(top_card)
+    return card.is_match(top_card) or card.color == "wild"
 
 def generate_deck():    #random deck for the player 
     colors = ["red", "yellow", "green", "blue"]
@@ -269,8 +239,7 @@ def reshuffle_pile_into_deck(pile, deck):
     deck.extend(pile)
     pile.clear()
 
-    reshuffled_cards = random.shuffle(deck) #shuffle
-    deck.extend(reshuffled_cards)    #shuffled cards are the new deck
+    random.shuffle(deck) #shuffle
 
 def draw_hand(screen, hand, x, y, card_spacing, card_back_surf, show_face=True):
     rects = []
@@ -362,6 +331,7 @@ def choose_best_color(hand, avoid_color=None):
 
     return max(counts, key=counts.get)
 
+
 def main():
     #game setup
     pygame.init()
@@ -397,7 +367,9 @@ def main():
     deal_cards_with_animation(screen, deck, player, computer, card_back_surf, (shared_pos[0]-120, shared_pos[1]-20), player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), draw_frame_cb=draw_frame, card_spacing=30)
     if deck:
         pile.append(deck.pop())
-    
+    else:
+        reshuffle_pile_into_deck(pile, deck)
+
     game_message = "Your upp!"
     def draw_message(screen, font, message):
         if not message:
@@ -411,25 +383,46 @@ def main():
 
     first_rect = pygame.Rect(260, 250, 180, 60)
     comp_rect = pygame.Rect(260, 330, 180, 60)
+    uno_rect = pygame.Rect(350, 200, 100, 50)
+    catch_rect = pygame.Rect(460, 200, 150, 50)
 
-    draw_button(screen, first_rect, "I will go first", font, (0, 120, 255), (255, 255, 255))
-    draw_button(screen, comp_rect, "computers first!", font, (120, 0, 255), (255, 255, 255))
-    pygame.display.flip()
+    ui_buttons = {
+        "player_first": first_rect,
+        "computer_first": comp_rect,
+        "uno": uno_rect,
+        "catch": catch_rect
+    }
 
-    choice = wait_for_click([(first_rect, "player"), (comp_rect, "computer")])
-    turn = 0 if choice == "player" else 1   #decide who goes first.
-
+    game_state = "choose_first"
+    turn = 0
     running = True
     pending_draw = 0
     choosing_color = False 
     color_buttons = {}  #empty dict
     wild_color_waiting = None 
+    wait_for_uno = False
+    uno_player = None 
+    current_player = None
+
+    def draw_ui(screen, game_state, font, buttons):
+        if game_state == "choose_first":    
+            draw_button(screen, buttons["player_first"], "I will go first", font, (0, 120, 255), (255, 255, 255))
+            draw_button(screen, buttons["comp_first"], "computers first!", font, (120, 0, 255), (255, 255, 255))
+        elif game_state == "choosing_color":
+            return draw_color_buttons(screen, font)
+        elif game_state == "wait_for_uno":
+            draw_button(screen, buttons["uno"] , "UNO!", font, (255, 0, 0), (255, 255, 255))
+            draw_button(screen, buttons["catch"], "CATCH!", font, (0, 0, 0), (255, 255, 255))
+        
+        return {}   #no special Ui is active 
 
     while running:
         draw_frame(screen)#set the game up
+        draw_message(screen, font, game_message)
         
-        if choosing_color:
-            color_buttons = draw_color_buttons(screen, font)
+        active_buttons = draw_ui(screen, game_state, font, ui_buttons)
+        if game_state == "choosing_color":
+            color_buttons = active_buttons
         
         pygame.display.flip()
         clock.tick(30)
@@ -437,117 +430,154 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            
-            if choosing_color:
-                if event.type == pygame.MOUSEBUTTONDOWN:
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if game_state == "choose_first":
+                    mx, my = event.pos 
+                    if ui_buttons["player_first"].collidepoint(mx, my):
+                        turn = 0
+                        game_state = "playing"
+                    elif ui_buttons["computer_first"].collidepoint(mx, my):
+                        turn = 1
+                        game_state = "playing"
+                    continue 
+
+                if game_state == "choosing_color":
                     mx, my = event.pos
                     for color, rect in color_buttons.items():
                         if rect.collidepoint(mx, my):
                             wild_color_waiting.color = color 
-                            wild_card_waiting = None 
+                            wild_color_waiting = None 
                             choosing_color = False
                             turn, pending_draw = apply_special_card_effects(pile[-1], turn, pending_draw)
                             turn += 1
                     continue
-
-            #player's turn
-            if turn%2 == 0: 
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    mx, my = event.pos
-                    rects = draw_hand(screen, player.hand, 50, 500, 30, card_back_surf, show_face=True)
-                    
-                    for idx, r in enumerate(rects):
-                        if r.collidepoint(mx, my):
-                            chosen = player.hand[idx]
-                            top = pile[-1] if pile else None 
-                            
-                            if pending_draw > 0:                             
-                                if is_valid_stack(chosen, top, pending_draw):
-                                    player.hand.pop(idx)
-                                    pile.append(chosen)
-                                
-                                    if chosen.value == "wild" or chosen.value == "+4":
-                                        choosing_color = True
-                                        wild_card_waiting = chosen 
-                                        _, pending_draw = apply_special_card_effects(chosen, turn, pending_draw)
-                                    else:
-                                        turn, pending_draw = apply_special_card_effects(chosen, turn, pending_draw)
-                                        turn += 1 
-                                else:
-                                    turn, pending_draw = draw_until_playable(player, pile, deck, turn, pending_draw)
-                                break
-                            else: #normal pending_draw is 0
-                                if chosen.is_match(top) or chosen.color == "wild":
-                                    player.hand.pop(idx)
-                                    pile.append(chosen)
-
-                                    if chosen.value in ["wild", "+4"]:  #stays the same. 
-                                        choosing_color = True 
-                                        wild_card_waiting = chosen #chosen card is put into waiting box
-                                        _, pending_draw = apply_special_card_effects(chosen, turn, pending_draw)
-                                        break 
-                                    else:
-                                        turn, pending_draw = apply_special_card_effects(chosen. turn, pending_draw)
-                                        turn += 1
-                                        break  
-                    
-                    deck_rect = pygame.Rect(300, 200, 100, 150)
-                    if deck_rect.collidepoint(mx, my):
-                        turn, pending_draw = draw_until_playable(player, pile, deck, turn, pending_draw)
-
-            if turn %2 != 0 and not choosing_color:   #computer plays portion
-                pygame.time.delay(400)
-                top = pile[-1] if pile else None 
-                played = False 
                 
-                if pending_draw == 0:   #no penalty
+                if game_state == "wait_for_uno":
+                    mx, my = event.pos
+                    if ui_buttons["uno"].collidepoint(mx, my):
+                        game_message = f"{uno_player.name} declared UNO!"
+                        uno_player.declared_uno = True
+                        game_state = "playing" # Return to normal game
+                        turn += 1 # Move to the next turn
+                        continue
+                    elif ui_buttons["catch"].collidepoint(mx, my):
+                        game_message = f"CAUGHT! {uno_player.name} draws 2!"
+                        for _ in range(2):                          # Add penalty to the person who forgot to say UNO
+                            if deck: uno_player.hand.append(deck.pop())
+                            
+                        game_state = "playing"
+                        turn += 1
+                        continue
+
+            if game_state == "playing":
+                if turn%2 == 0: #player's turn
+                    current_player = player 
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        mx, my = event.pos
+                        
+                        deck_rect = pygame.Rect(300, 200, 100, 150) #deck obej
+                        if deck_rect.collidepoint(mx, my):
+                            turn, pending_draw = draw_until_playable(player, pile, deck, turn, pending_draw)
+                            game_message = msg
+                            continue #leave event check
+
+                        rects = draw_hand(screen, player.hand, 50, 500, 30, card_back_surf, show_face=True)
+                        for idx, r in enumerate(rects):
+                            if r.collidepoint(mx, my):
+                                chosen = player.hand[idx]
+                                top = pile[-1]
+                                
+                                if is_move_valid(chosen, top, pending_draw):
+                                    player.hand.pop(idx)
+                                    pile.append(chosen)
+
+                                    if chosen.value in ["wild", "+4"]:
+                                        choosing_color = True 
+                                        wild_color_waiting = chosen 
+                                        break 
+                                    
+                                    turn, pending_draw = apply_special_card_effects(chosen, turn, pending_draw)
+                                else:
+                                    game_message = "You can't play that card right now!"
+                        
+                        status = player.valid_win()
+                        if status == "win":
+                            game_message = "you won!"
+                            running = False 
+                        elif status == "needs_uno":
+                            uno_player = player
+                            game_state = "wait_for_uno"
+                        else:
+                            turn += 1
+
+                if turn %2 != 0 and game_state == "playing":   #computer plays portion
+                    current_player = computer
+                    pygame.time.delay(400)
+                    top = pile[-1]
+                    played = False 
+                    best_card = None
+                    
                     for c in computer.hand:
-                        if c.value not in ["+2", "+4"] and c.is_match(top):
-                            if is_move_valid(c, top, pending_draw):
+                        if is_move_valid(c, top, pending_draw):
+                            if pending_draw == 0 and c.value not in ["+2", "+4"]:
+                                best_card = c
+                                break 
+                                #computer.hand.remove(c)
+                                #pile.append(c)
+                            elif pending_draw > 0:
+                                best_card = c
+                                break 
+
+                            if c.value in ["wild", "+4"]:   #keep it like this
                                 computer.hand.remove(c)
                                 pile.append(c)
-
-                        if c.value in ["wild", "+4"]:   #keep it like this
-                            computer.hand.remove(c)
-                            pile.append(c)
-                            c.color = choose_best_color(computer.hand, avoid_color=True)
-                            turn, pending_draw = apply_special_card_effects(c, turn, pending_draw)
-                            played = True 
-                            break 
-
-                if not played and pending_draw>0:
-                    for c in computer.hand:
-                        if is_valid_stack(c, top, pending_draw):
-                            computer.hand.remove(c)
-                            pile.append(c)
-                            
-                            if c.value in ["wild", "+4"]:
                                 c.color = choose_best_color(computer.hand, avoid_color=True)
+                                turn, pending_draw = apply_special_card_effects(c, turn, pending_draw)
+                                played = True 
+                                break 
+                    
+                    if not best_card:   #find best power card. if all else fails
+                        for c in computer.hand:
+                            if is_move_valid(c, top, pending_draw):
+                                best_card = c
+                                break 
+                                
+                    if best_card:
+                        computer.hand.remove(best_card)
+                        pile.append(best_card)
 
-                            turn, pending_draw = apply_special_card_effects(c, turn, pending_draw)
-                            played = True 
-                            break 
-                
-                if not played:
-                    turn, pending_draw = draw_until_playable(computer, pile, deck, turn, pending_draw)
-                else:   #player's turn (stacking fails)
-                    turn, pending_draw = draw_until_playable(player. pile. deck. turn, pending_draw)
-                turn += 1
+                        if best_card.value in ["wild", "+4"]:   #if wild or +4, computer chooses color
+                            best_card.color = choose_best_color(computer.hand)
+                        
+                        turn, pending_draw = apply_special_card_effects(best_card, turn, pending_draw)
+                        if best_card.value not in ["reverse", "skip", "+2", "+4", "wild"]:
+                            turn += 1
+                        played = True 
+                    
+                    if not played:
+                        turn, pending_draw, msg = draw_until_playable(computer, pile, deck, turn, pending_draw)
+                        game_message = msg 
         
-        w, uno = player.valid_win(screen, font, deck)
-        if w:
-            print("you won!")
-            running = False     #break the loop b/c player won
-            break 
+            status = current_player.valid_win()
+            if status == "win":
+                game_message = f"{current_player.name} won!"
+                running = False     #break the loop b/c player won
+                break 
+            elif status == "needs_uno":
+                if current_player.is_human:
+                    wait_for_uno = True 
+                    uno_player = current_player
+                else:
+                    current_player.declared_uno = True 
+            
 
-        w2, uno = computer.valid_win(screen, font, deck)
-        if w2:
-            print("Computer won")
-            running = False
-            break 
+            won2, uno = computer.valid_win()
+            if won2:
+                game_message = "Computer won"
+                running = False
+                break 
     pygame.quit()
 
 if __name__ == "__main__":
     main()
-
-
