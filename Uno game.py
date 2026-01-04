@@ -398,7 +398,7 @@ def main():
     def draw_ui(screen, game_state, font, buttons):
         if game_state == "choose_first":    
             draw_button(screen, buttons["player_first"], "I will go first", font, (0, 120, 255), (255, 255, 255))
-            draw_button(screen, buttons["comp_first"], "computers first!", font, (120, 0, 255), (255, 255, 255))
+            draw_button(screen, buttons["computer_first"], "computers first!", font, (120, 0, 255), (255, 255, 255))
         elif game_state == "choosing_color":
             return draw_color_buttons(screen, font)
         elif game_state == "wait_for_uno":
@@ -545,12 +545,10 @@ def main():
                 break 
             elif status == "needs_uno":
                 if current_player.is_human:
-                    wait_for_uno = True 
                     uno_player = current_player
                 else:
                     current_player.declared_uno = True 
             
-
             status_comp = computer.valid_win()
             if status_comp == "win":
                 game_message = "Computer won"
