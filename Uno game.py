@@ -133,10 +133,12 @@ def card_penalty_value(card):
 
 #make sure penalty cards are stacked properly
 def is_valid_stack(new_card, top_card, pending_draw):   #pend draw = cards next player needs to draw
-    new_penalty = card_penalty_value(new_card)
-    if new_penalty == 0:
-        return False 
-    return new_penalty >= min(4, pending_draw / (pending_draw // new_penalty))  #compare penalty value of new card w/ previous card
+    if pending_draw == 0: return True
+    if top_card.value == "+2" and new_card.value == "+2":    #stack +2 check
+        return True 
+    if new_card.value == "+4":    #stack +4 check
+        return True 
+    return False    #no penalty needs to be applied
 
 def find_stack_card(deck, top_card, pending_draw):
     penalty_cards = [c for c in deck if is_valid_stack(c, top_card, pending_draw)]
@@ -148,53 +150,42 @@ def find_normal_Card(deck, top_card):
 
 def apply_special_card_effects(card, turn, pending_draw):
     if card.value == "skip":
-        return turn + 2, pending_draw 
+        return turn + 1, pending_draw 
     elif card.value == "reverse":
-        return turn - 1, pending_draw 
+        return turn + 1, pending_draw 
     elif card.value == "+2":
         return turn, pending_draw + 2
     elif card.value == "+4":
         return turn, pending_draw + 4
-    return turn+1, pending_draw
+    return turn, pending_draw
 
 def draw_until_playable(player, pile, deck, turn, pending_draw, max_draw=50):
     draws = 0
     top_card = pile[-1] 
+    msg = f"{player.name} had to draw."
 
     while draws < max_draw: 
         if not deck:
-            print("deck empty. reshuffling!")
             reshuffle_pile_into_deck(pile, deck)
+            game_message = f"Deck is empty. reshuffling now..."
             if not deck: break 
         
         drawn_card = deck.pop()
         player.hand.append(drawn_card)
         draws += 1
 
-        is_playable = False 
-        if pending_draw > 0:
-            if is_valid_stack(drawn_card, top_card, pending_draw):
-                is_playable = True 
-        else:
-            if drawn_card.is_match(top_card) or drawn_card.color == "wild":
-                is_playable = True 
-            
-        if is_playable:
-            if player.is_human and (drawn_card.color == "wild" or drawn_card.value == "+4"):    #make sure player is human. if so, pause
-                msg = f"{player.name} drew and played {drawn_card.value}"
-                #insert animation feature to let player know
-                return turn, pending_draw, msg
-        
-            
+        if is_move_valid(drawn_card, top_card, pending_draw):
             player.hand.remove(drawn_card)
             pile.append(drawn_card)
+            msg = f"{player.name} drew and played {drawn_card}"
 
-            if not player.is_human and (drawn_card.color == "wild" or drawn_card.value == "+4"):
+            if not player.is_human and drawn_card.color == "wild":
                 drawn_card.color = choose_best_color(player.hand)
             
-            return apply_special_card_effects(drawn_card, turn, pending_draw)
-    msg = f"{player.name} drew {max_draw} cards. no match was found"
-    return turn+1, 0, msg 
+            new_turn, new_pending = apply_special_card_effects(drawn_card, turn, pending_draw)
+            return new_turn + 1, new_pending, msg 
+    
+    return turn + 1, 0, f"{player.name} couldn't find a move." 
 
 
 def is_move_valid(card, top_card,pending_draw):
@@ -288,7 +279,7 @@ def animate_card(screen, image_surf, start_pos, end_pos, draw_frame_cb , steps=2
         if image_surf:
             screen.blit(image_surf, (x,y))
         
-        pygame.displayflip()
+        pygame.display.flip()
         pygame.time.delay(delay_ms)
 
 #testing logic to distribute cards 
@@ -305,19 +296,21 @@ def deal_cards(deck, players, num_cards=7):
             if deck:
                 player.hand.append(deck.pop())
 
-def deal_cards_with_animation(screen, deck, player, computer, deck_pos, card_back, draw_frame_cb, spacing = 30):
+def deal_cards_with_animation(screen, deck, player, computer, card_back, deck_pos, draw_frame_cb, player_start_pos=None, computer_start_pos=None, spacing = 30):
     for i in range(7):
         card = deck.pop()  #logic based function covers these
         player.hand.append(card)
 
         end_pos = (100 + i * spacing, 500)
-        animate_card(screen, card.image, deck_pos, end_pos, draw_frame_cb)
+        start = player_start_pos if player_start_pos else deck_pos
+        animate_card(screen, card.image, start, end_pos, draw_frame_cb)
 
+        if not deck: break
         card = deck.pop()
         computer.hand.append(card)
-
         end_pos = (100 + i * spacing, 50)
-        animate_card(screen, card_back, deck_pos, end_pos, draw_frame_cb)
+        start = computer_start_pos if computer_start_pos else deck_pos 
+        animate_card(screen, card_back, start, end_pos, draw_frame_cb)
 
 def choose_best_color(hand, avoid_color=None):
     counts = {c: 0 for c in ["red", "green", "blue", "yellow"]}
@@ -346,7 +339,7 @@ def main():
     TABLE_GREEN = (34, 139, 34)
 
     #images
-    card_back_surf = load_image_by_name("card back", size=(980, 120)) or pygame.Surface((80,120))
+    card_back_surf = load_image_by_name("card back", size=(80, 120)) or pygame.Surface((80,120))
     shared_deck_surf = load_image_by_name("shared_deck", size=(80, 120)) or card_back_surf
     
     deck = generate_deck()
@@ -364,7 +357,7 @@ def main():
         draw_hand(surf, player.hand, 50, 500, 30, card_back_surf, show_face=True)
         draw_hand(surf, computer.hand, 50, 50, 30, card_back_surf, show_face=False)
 
-    deal_cards_with_animation(screen, deck, player, computer, card_back_surf, (shared_pos[0]-120, shared_pos[1]-20), player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), draw_frame_cb=draw_frame, card_spacing=30)
+    deal_cards_with_animation(screen, deck, player, computer, card_back_surf, (shared_pos[0]-120, shared_pos[1]-20), draw_frame_cb=draw_frame, player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), card_spacing=30)
     if deck:
         pile.append(deck.pop())
     else:
@@ -397,10 +390,8 @@ def main():
     turn = 0
     running = True
     pending_draw = 0
-    choosing_color = False 
     color_buttons = {}  #empty dict
     wild_color_waiting = None 
-    wait_for_uno = False
     uno_player = None 
     current_player = None
 
@@ -432,8 +423,8 @@ def main():
                 running = False
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if game_state == "choose_first":
-                    mx, my = event.pos 
+                mx, my = event.pos
+                if game_state == "choose_first": 
                     if ui_buttons["player_first"].collidepoint(mx, my):
                         turn = 0
                         game_state = "playing"
@@ -443,12 +434,11 @@ def main():
                     continue 
 
                 if game_state == "choosing_color":
-                    mx, my = event.pos
                     for color, rect in color_buttons.items():
                         if rect.collidepoint(mx, my):
                             wild_color_waiting.color = color 
                             wild_color_waiting = None 
-                            choosing_color = False
+                            game_state = "playing"
                             turn, pending_draw = apply_special_card_effects(pile[-1], turn, pending_draw)
                             turn += 1
                     continue
@@ -493,7 +483,7 @@ def main():
                                     pile.append(chosen)
 
                                     if chosen.value in ["wild", "+4"]:
-                                        choosing_color = True 
+                                        game_state = "choosing_color"
                                         wild_color_waiting = chosen 
                                         break 
                                     
@@ -520,22 +510,9 @@ def main():
                     
                     for c in computer.hand:
                         if is_move_valid(c, top, pending_draw):
-                            if pending_draw == 0 and c.value not in ["+2", "+4"]:
+                            if pending_draw == 0 and c.value not in ["+2", "+4", "wild", "skip", "reverse"]:
                                 best_card = c
-                                break 
-                                #computer.hand.remove(c)
-                                #pile.append(c)
-                            elif pending_draw > 0:
-                                best_card = c
-                                break 
-
-                            if c.value in ["wild", "+4"]:   #keep it like this
-                                computer.hand.remove(c)
-                                pile.append(c)
-                                c.color = choose_best_color(computer.hand, avoid_color=True)
-                                turn, pending_draw = apply_special_card_effects(c, turn, pending_draw)
-                                played = True 
-                                break 
+                                break  
                     
                     if not best_card:   #find best power card. if all else fails
                         for c in computer.hand:
@@ -546,13 +523,15 @@ def main():
                     if best_card:
                         computer.hand.remove(best_card)
                         pile.append(best_card)
+                        game_message = f"{computer.name} played {best_card.color} {best_card.value}"
+
 
                         if best_card.value in ["wild", "+4"]:   #if wild or +4, computer chooses color
                             best_card.color = choose_best_color(computer.hand)
+                            game_message += f" (Color: {best_card.color})"
                         
                         turn, pending_draw = apply_special_card_effects(best_card, turn, pending_draw)
-                        if best_card.value not in ["reverse", "skip", "+2", "+4", "wild"]:
-                            turn += 1
+                        turn += 1
                         played = True 
                     
                     if not played:
@@ -572,8 +551,8 @@ def main():
                     current_player.declared_uno = True 
             
 
-            won2, uno = computer.valid_win()
-            if won2:
+            status_comp = computer.valid_win()
+            if status_comp == "win":
                 game_message = "Computer won"
                 running = False
                 break 
