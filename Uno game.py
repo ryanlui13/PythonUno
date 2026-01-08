@@ -432,11 +432,14 @@ def main():
         elif game_state == "game_over":
             draw_button(screen, buttons["restart"], "Restart game", font, (50, 50, 50), (255, 255, 255))
             return buttons 
+        elif game_state == "playing" and turn %2 == 0:
+            if card_played_this_turn:
+                draw_button(screen, buttons["end_turn"], "END TURN!", font, (50, 200, 50), (255, 255, 255))
         
         return {}   #no special Ui is active 
 
+    card_played_this_turn = False 
     while running:
-        card_played_this_turn = False 
         draw_frame(screen)#set the game up
         player_rects = draw_hand(screen, player.hand, 50, 500, 30, card_back_surf, show_face=True)        
         draw_message(screen, font, game_message)
@@ -470,7 +473,7 @@ def main():
                     if wild_color_waiting is not None:
                         for color, rect in color_buttons.items():
                             if rect.collidepoint(mx, my):
-                                wild_color_waiting = color 
+                                wild_color_waiting.color = color 
 
                                 base = f"{color}_{wild_color_waiting.value}"
                                 wild_color_waiting.image = load_image_by_name(base, size=(80,120))
@@ -513,16 +516,18 @@ def main():
                     if turn % 2 == 0: # player's turn
                         current_player = player 
                         
-                        if ui_buttons["end_turn"].collidepoint(mx, my) and card_played_this_turn:
-                            turn += 1
-                            card_played_this_turn = False 
-                            game_message = "Computer turn"
-                            continue 
+                        if ui_buttons["end_turn"].collidepoint(mx, my):
+                            if card_played_this_turn:
+                                turn += 1
+                                card_played_this_turn = False 
+                                game_message = "Computer turn"
+                                continue 
                     
                         # Deck Click logic
                         deck_rect = pygame.Rect(280, 240, 80, 120)
                         if deck_rect.collidepoint(mx, my):
-                            turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw)
+                            if not card_played_this_turn:
+                                turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw)
                             continue 
 
                         # Card Click logic
@@ -547,7 +552,7 @@ def main():
                                             game_state = "choosing_color" # Use state instead of variable
                                             wild_color_waiting = chosen 
                                     
-                                    game_message = "Playe another same value card or click "
+                                    game_message = "Play another same value card or click "
                                     break  
 
         if game_state == "playing" and turn % 2 != 0:   #computer plays portion
@@ -577,12 +582,14 @@ def main():
             
                 computer.hand.remove(chosen_card)
                 pile.append(chosen_card)
+                pygame.display.flip()   #see the card computer plays
 
                 if chosen_card.value in ["wild", "+4"]:
                     new_color = choose_best_color(computer.hand)
                     chosen_card.color = new_color
                     
-                    base = f"{new_color}_{chosen_card.color}"
+                    base = f"{new_color}_{chosen_card.value}"
+
                     chosen_card.image = load_image_by_name(base, size=(80,120))
                     game_message = f"Computer chose {new_color.upper()}!"
 
