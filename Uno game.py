@@ -349,7 +349,10 @@ def main():
     shared_deck_surf = load_image_by_name("shared_deck", size=(80, 120)) or card_back_surf
     
     #deck positions and set up
-    DECK_POS = (280, 240)
+    shared_pos = (screen.get_width() // 2, screen.get_height() // 2)
+    deck_x = shared_pos[0] - 120
+    deck_y = shared_pos[1] - 20
+    DECK_POS = (deck_x, deck_y)
     deck_rect = pygame.Rect(DECK_POS[0], DECK_POS[1], 80, 120)
     deck = generate_deck()
 
@@ -525,14 +528,13 @@ def main():
                                 continue 
                     
                         # Deck Click logic
-                        deck_rect = pygame.Rect(DECK_POS[0], DECK_POS[1], 80, 120)
                         if deck_rect.collidepoint(mx, my):
                             if not card_played_this_turn:   #if card wasn't played yet, see if any cards need to be drawn
                                 turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)
                             continue 
 
                         # Card Click logic
-                        for idx in range(len(player_rects), -1, -1, -1):
+                        for idx in range(len(player_rects) - 1, -1, -1):
                             r = player_rects[idx]   #holds the card object 
                             if r.collidepoint(mx, my):
                                 chosen = player.hand[idx]
