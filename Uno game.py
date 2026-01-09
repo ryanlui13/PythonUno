@@ -164,9 +164,10 @@ def apply_special_card_effects(card, turn, pending_draw):
         return turn, pending_draw + 4, "Wild Draw 4!"
     return turn+1, pending_draw, ""
 
-def draw_until_playable(player, pile, deck, turn, pending_draw, max_draw=50):
+def draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame, max_draw=50):
     draws = 0
     top_card = pile[-1] 
+    is_playable = False 
 
     while draws < max_draw: 
         if not deck:
@@ -176,11 +177,12 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, max_draw=50):
         
         drawn_card = deck.pop()
         player.hand.append(drawn_card)
-        pygame.display.flip()
-        pygame.time.delay(400)
         draws += 1
 
-        is_playable = False 
+        draw_frame(screen)
+        pygame.display.flip()
+        pygame.time.delay(400)
+
         if pending_draw > 0:
             if is_valid_stack(drawn_card, top_card, pending_draw):
                 is_playable = True 
@@ -188,23 +190,11 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, max_draw=50):
             if drawn_card.is_match(top_card) or drawn_card.color == "wild":
                 is_playable = True 
             
-    if is_playable:
-        if player.is_human and (drawn_card.color == "wild" or drawn_card.value == "+4"):    #make sure player is human. if so, pause
-            msg = f"{player.name} drew and played {drawn_card.value}"
-                #insert animation feature to let player know
-            return turn, pending_draw, msg
-          
-        player.hand.remove(drawn_card)
-        pile.append(drawn_card)
-
-        if not player.is_human and (drawn_card.color == "wild" or drawn_card.value == "+4"):
-            drawn_card.color = choose_best_color(player.hand)
-            
-        new_turn, new_pending, game_message = apply_special_card_effects(drawn_card, turn, pending_draw)
-        return new_turn, new_pending, f"{player.name} played {drawn_card.value}"
+        if is_playable:
+            return turn, pending_draw, f"{player.name} drew a playable card!"
         
     msg = f"{player.name} drew {max_draw} cards. no match was found"
-    return turn+1, 0, msg 
+    return turn + 1, 0, msg 
 
 
 def is_move_valid(card, top_card,pending_draw):
@@ -243,13 +233,16 @@ def shuffle_deck(deck): #shuffle deck before new game
 
 def reshuffle_pile_into_deck(pile, deck):
     if len(pile) <= 1:
-        return None 
+        return 
     
-    top_card = pile.pop()   #save the top card for next player's reference
-    deck.extend(pile)
-    pile.clear()
+    top_card = pile[-1]   #save the top card for next player's reference
+    cards_to_shuffle = pile[:-1]
+    
+    deck.extend(cards_to_shuffle)
+    random.shuffle(deck)
 
-    random.shuffle(deck) #shuffle
+    pile.clear()
+    pile.append(top_card)
 
 def draw_hand(screen, hand, x, y, card_spacing, card_back_surf, show_face=True):
     rects = []
@@ -516,6 +509,9 @@ def main():
                     if turn % 2 == 0: # player's turn
                         current_player = player 
                         
+                        if pending_draw > 0:
+                            game_message = f"You must stack a valid penalty or draw {pending_draw} cards..."
+
                         if ui_buttons["end_turn"].collidepoint(mx, my):
                             if card_played_this_turn:
                                 turn += 1
@@ -526,8 +522,7 @@ def main():
                         # Deck Click logic
                         deck_rect = pygame.Rect(280, 240, 80, 120)
                         if deck_rect.collidepoint(mx, my):
-                            if not card_played_this_turn:
-                                turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw)
+                            turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)
                             continue 
 
                         # Card Click logic
@@ -555,6 +550,14 @@ def main():
                                     game_message = "Play another same value card or click "
                                     break  
 
+        if not pile:
+            if deck:
+                pile.append(deck.pop())
+            else:
+                game_message = "Deck and pile are both empty. Error!"
+        
+        top = pile[-1]
+
         if game_state == "playing" and turn % 2 != 0:   #computer plays portion
             current_player = computer
             pygame.time.delay(800)
@@ -572,7 +575,7 @@ def main():
                     if valid_power_cards:   #look for a valid power card
                         chosen_card = valid_power_cards[0]
                     else:
-                        turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw)
+                        turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
                         continue 
 
                 elif normal_cards:
@@ -582,9 +585,17 @@ def main():
             
                 computer.hand.remove(chosen_card)
                 pile.append(chosen_card)
+
+                draw_frame(screen)
                 pygame.display.flip()   #see the card computer plays
+                pygame.time.delay(800)
+
+                if chosen_card.value in ["+2", "+4"]:
+                    turn += 1
+                    continue
 
                 if chosen_card.value in ["wild", "+4"]:
+                    turn += 1
                     new_color = choose_best_color(computer.hand)
                     chosen_card.color = new_color
                     
@@ -595,7 +606,7 @@ def main():
 
                 turn, pending_draw, game_message = apply_special_card_effects(chosen_card, turn, pending_draw)
             else:   #no valid card, computer draws
-                turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw)
+                turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
             
         if game_state == "playing" and current_player is not None:
             status = current_player.valid_win()
