@@ -348,7 +348,12 @@ def main():
     card_back_surf = load_image_by_name("card_back", size=(80, 120))
     shared_deck_surf = load_image_by_name("shared_deck", size=(80, 120)) or card_back_surf
     
+    #deck positions and set up
+    DECK_POS = (280, 240)
+    deck_rect = pygame.Rect(DECK_POS[0], DECK_POS[1], 80, 120)
     deck = generate_deck()
+
+    #set player and computer up
     player = Player("you", is_human=True)
     computer = Player("Python", is_human=False)
 
@@ -520,14 +525,15 @@ def main():
                                 continue 
                     
                         # Deck Click logic
-                        deck_rect = pygame.Rect(280, 240, 80, 120)
+                        deck_rect = pygame.Rect(DECK_POS[0], DECK_POS[1], 80, 120)
                         if deck_rect.collidepoint(mx, my):
-                            turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)
+                            if not card_played_this_turn:   #if card wasn't played yet, see if any cards need to be drawn
+                                turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)
                             continue 
 
                         # Card Click logic
-                        card_played = False
-                        for idx, r in enumerate(player_rects):
+                        for idx in range(len(player_rects), -1, -1, -1):
+                            r = player_rects[idx]   #holds the card object 
                             if r.collidepoint(mx, my):
                                 chosen = player.hand[idx]
                                 top = pile[-1]
@@ -541,14 +547,14 @@ def main():
                                         card_played_this_turn = True    #stacking ends
 
                                         if chosen.value in ["+2", "+4"]:
-                                            _, pending_draw, game_message = apply_special_card_effects(chosen, turn, pending_draw)
+                                            _, pending_draw, game_message = apply_special_card_effects(chosen, turn, pending_draw) 
 
                                         if chosen.value in ["wild", "+4"]:
                                             game_state = "choosing_color" # Use state instead of variable
                                             wild_color_waiting = chosen 
                                     
                                     game_message = "Play another same value card or click "
-                                    break  
+                                    break  #stop loop for any valid card play
 
         if not pile:
             if deck:
