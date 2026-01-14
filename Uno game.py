@@ -69,6 +69,9 @@ class Card():
     def __init__(self, color, value):   #initalize card and their images
         self.color = color
         self.value = value 
+        if value in ["wild", "+4"]:
+            self.color = "wild"
+        
         base = f"{self.color}_{self.value}" if self.color != "wild" else f"wild_{self.value}"
         img = load_image_by_name(base, size=(80, 120))
         if img is None:
@@ -80,15 +83,17 @@ class Card():
     
     def is_match(self, other_card): #check if the player's card can be placed down
         if other_card is None:
-            return None 
-        return (self.color == other_card.color) or (self.value == other_card.value)
+            return True 
+        if self.color == "wild":
+            return True 
+        
+        return (self.color == other_card.color) or (self.value == other_card.value) #normal valid card to play
     
     def __str__(self):  #what the user sees
         return f"{self.color} {self.value}" if self.color else self.value
     
     def __repr__(self):
         return f"Card({self.color!r}, {self.value!r})"
-        print(player.hand)
 
 class Player(): #integrating player class to make data easier to store / call 
     def __init__(self, name, is_human=True):
@@ -169,7 +174,10 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_fra
     top_card = pile[-1] 
     is_playable = False 
 
+    required_draws = pending_draw if pending_draw > 0 else 1
+
     while draws < max_draw: 
+        pygame.event.pump() #prevent freezing
         if not deck:
             print("deck empty. reshuffling!")
             reshuffle_pile_into_deck(pile, deck)
@@ -184,23 +192,30 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_fra
         pygame.time.delay(400)
 
         if pending_draw > 0:
-            if is_valid_stack(drawn_card, top_card, pending_draw):
-                is_playable = True 
+            if draws < pending_draw:
+                continue 
+            else:
+                return turn, 0, f"{player.name} drew {draws} cards"
+            
         else:
             if drawn_card.is_match(top_card) or drawn_card.color == "wild":
-                is_playable = True 
-            
-        if is_playable:
-            return turn, pending_draw, f"{player.name} drew a playable card!"
+                return turn, 0, f"{player.name} drew a playable card!"
         
     msg = f"{player.name} drew {max_draw} cards. no match was found"
     return turn + 1, 0, msg 
 
 
-def is_move_valid(card, top_card,pending_draw):
+def is_move_valid(chosen_card, top_card,pending_draw):
     if pending_draw > 0:
-        return is_valid_stack(card, top_card, pending_draw)
-    return card.is_match(top_card) or card.color == "wild"
+        if top_card.value == "+2":
+            return chosen_card.value in ["+2", "+4"]
+        if top_card.value == "+4":
+            return chosen_card.value == "+4"
+        return False #in case of some penalty
+    if chosen_card.color == "wild":
+        return True 
+    
+    return (chosen_card.color == top_card.color or chosen_card.value == top_card.value)
 
 def generate_deck():    #random deck for the player 
     colors = ["red", "yellow", "green", "blue"]
@@ -350,7 +365,7 @@ def main():
     
     #deck positions and set up
     shared_pos = (screen.get_width() // 2, screen.get_height() // 2)
-    deck_x = shared_pos[0] - 120
+    deck_x = shared_pos[0] - 220
     deck_y = shared_pos[1] - 20
     DECK_POS = (deck_x, deck_y)
     deck_rect = pygame.Rect(DECK_POS[0], DECK_POS[1], 80, 120)
@@ -360,19 +375,17 @@ def main():
     player = Player("you", is_human=True)
     computer = Player("Python", is_human=False)
 
-    shared_pos = (550, 350)
-    shared_pos = ((screen.get_width()) // 2, screen.get_height() // 2)
     pile = []
     #draw the frame
     def draw_frame(surf):
         surf.fill(TABLE_BLUE)
-        surf.blit(shared_deck_surf, (shared_pos[0]-120, shared_pos[1]-20))  #deck, left of center
+        surf.blit(shared_deck_surf, (shared_pos[0]-200, shared_pos[1]-20))  #deck, left of center
         draw_pile(surf, pile, center=(shared_pos[0], shared_pos[1]))
         
-        draw_hand(surf, player.hand, 50, 500, 30, card_back_surf, show_face=True)
+        draw_hand(surf, player.hand, 50, 520, 30, card_back_surf, show_face=True)
         draw_hand(surf, computer.hand, 50, 50, 50, card_back_surf, show_face=False)
 
-    deal_cards_with_animation(screen, deck, player, computer, (shared_pos[0]-120, shared_pos[1]-20), card_back_surf, draw_frame, player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), card_spacing=30)
+    deal_cards_with_animation(screen, deck, player, computer, (shared_pos[0]-200, shared_pos[1]-20), card_back_surf, draw_frame, player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), card_spacing=30)
     if deck:
         pile.append(deck.pop())
     else:
@@ -434,66 +447,89 @@ def main():
             draw_button(screen, buttons["restart"], "Restart game", font, (50, 50, 50), (255, 255, 255))
             return buttons 
         elif game_state == "playing" and turn %2 == 0:
-            if card_played_this_turn:
+            if card_played_this_turn and pending_draw == 0:
                 draw_button(screen, buttons["end_turn"], "END TURN!", font, (50, 200, 50), (255, 255, 255))
         
         return {}   #no special Ui is active 
 
+    turn = 0
+    last_turn = -1
     card_played_this_turn = False 
+
     while running:
-        draw_frame(screen)#set the game up
-        player_rects = draw_hand(screen, player.hand, 50, 500, 30, card_back_surf, show_face=True)        
-        draw_message(screen, font, game_message)
+        if game_state == "playing":
+            if turn % 2 == 0: # player's turn
+                current_player = player 
+                if last_turn != turn:
+                    card_played_this_turn = False 
+                    last_turn = turn 
+                    game_message = "Your turn!"                        
+                    print(F"Turn rest. card played was reseted to {card_played_this_turn}")
+                else:
+                    current_player = computer 
+                    if last_turn != turn:
+                        last_turn = turn 
         
+        #refresh the drawing after every frame
+        draw_frame(screen)
+        player_rects = draw_hand(screen, player.hand, 50, 520, 30, card_back_surf, show_face=True)
+        draw_message(screen, font, game_message)
         active_buttons = draw_ui(screen, game_state, font, ui_buttons)
         if game_state == "choosing_color":
-            color_buttons = active_buttons
+            color_buttons = active_buttons 
         
         pygame.display.flip()
         clock.tick(30)
-
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 game_state = "game_over"
+                running = False
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type == pygame.MOUSEBUTTONDOWN:    #have game states first
                 mx, my = event.pos
                 if game_state == "choose_first":
                     if ui_buttons["player_first"].collidepoint(mx, my):
                         turn = 0
-                        current_player = player 
                         game_state = "playing"
                     elif ui_buttons["computer_first"].collidepoint(mx, my):
                         turn = 1
                         current_player = computer
                         game_state = "playing"
                     continue 
-
-                if game_state == "choosing_color":
-                    mx, my = event.pos
-                    if wild_color_waiting is not None:
-                        for color, rect in color_buttons.items():
-                            if rect.collidepoint(mx, my):
-                                wild_color_waiting.color = color 
-
-                                base = f"{color}_{wild_color_waiting.value}"
-                                wild_color_waiting.image = load_image_by_name(base, size=(80,120))
-
-                                wild_color_waiting = None 
-                                
-                                _, pending_draw, game_message = apply_special_card_effects(pile[-1], turn, pending_draw)
-                                turn += 1
-                                game_state = "playing"
-                                break 
                 
-                if game_state == "wait_for_uno":
+                #end game
+                elif game_state == "game_over": 
+                    mx, my = event.pos 
+                    if ui_buttons["restart"].collidepoint(mx, my):
+                        main()  #restart game loop
+                        return 
+
+                #choose color
+                elif game_state == "choosing_color":
+                    mx, my = event.pos
+                    for color, rect in color_buttons.items():
+                        if rect.collidepoint(mx, my):
+                            wild_color_waiting.color = color 
+
+                            base = f"{color}_{wild_color_waiting.value}"
+                            wild_color_waiting.image = load_image_by_name(base, size=(80,120))
+
+                            wild_color_waiting = None 
+                            _, pending_draw, game_message = apply_special_card_effects(pile[-1], turn, pending_draw)
+                            turn += 1
+                            game_state = "playing"
+                            break 
+                
+                #uno game
+                elif game_state == "wait_for_uno":
                     mx, my = event.pos
                     if ui_buttons["uno"].collidepoint(mx, my):
                         game_message = f"{uno_player.name} declared UNO!"
                         uno_player.declared_uno = True
                         game_state = "playing" # Return to normal game
                         turn += 1 # Move to the next turn
-                        continue
+                    
                     elif ui_buttons["catch"].collidepoint(mx, my):
                         game_message = f"CAUGHT! {uno_player.name} draws 2!"
                         for _ in range(2):                          # Add penalty to the person who forgot to say UNO
@@ -505,59 +541,52 @@ def main():
                             
                         game_state = "playing"
                         turn += 1
-                        continue
-                
-                if game_state == "game_over":
-                    mx, my = event.pos 
-                    if ui_buttons["restart"].collidepoint(mx, my):
-                        main()  #restart game loop
-                        return 
-
-                if game_state == "playing":
-                    if turn % 2 == 0: # player's turn
-                        current_player = player 
-                        
-                        if pending_draw > 0:
-                            game_message = f"You must stack a valid penalty or draw {pending_draw} cards..."
-
-                        if ui_buttons["end_turn"].collidepoint(mx, my):
-                            if card_played_this_turn:
-                                turn += 1
-                                card_played_this_turn = False 
-                                game_message = "Computer turn"
-                                continue 
                     
-                        # Deck Click logic
-                        if deck_rect.collidepoint(mx, my):
-                            if not card_played_this_turn:   #if card wasn't played yet, see if any cards need to be drawn
-                                turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)
+                    continue
+
+                elif game_state == "playing" and turn % 2 == 0:
+                    #end turn button
+                    if ui_buttons["end_turn"].collidepoint(mx, my):
+                        if card_played_this_turn and pending_draw == 0:
+                            turn += 1
+                            card_played_this_turn = False 
+                            game_message = "Computer turn"
                             continue 
 
-                        # Card Click logic
-                        for idx in range(len(player_rects) - 1, -1, -1):
-                            r = player_rects[idx]   #holds the card object 
-                            if r.collidepoint(mx, my):
-                                chosen = player.hand[idx]
-                                top = pile[-1]
-                                    
-                                if is_move_valid(chosen, top, pending_draw):
-                                    if card_played_this_turn and chosen.value != top.value:
-                                        game_message = "You can only stack cards w/ the same value!"
-                                    else:
-                                        player.hand.pop(idx)
-                                        pile.append(chosen)
-                                        card_played_this_turn = True    #stacking ends
+                    if deck_rect.collidepoint(mx, my) and not card_played_this_turn:
+                        turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)    #draw the card
+                        card_played_this_turn = True 
+                        turn += 1
+                        game_message = "You drew cards. the computer goes now..."
+                        continue 
+                            
+                    for idx in range(len(player_rects) - 1, -1, -1):
+                        r = player_rects[idx]   #holds the card object 
+                        if r.collidepoint(mx, my):
+                            chosen = player.hand[idx]
+                            top = pile[-1]
+                            print(f"clicked: {chosen}, top: {top}, played: {card_played_this_turn}")                                
 
-                                        if chosen.value in ["+2", "+4"]:
-                                            _, pending_draw, game_message = apply_special_card_effects(chosen, turn, pending_draw) 
+                                        
+                            if is_move_valid(chosen, top, pending_draw):    #allows penalty stacking
+                                if card_played_this_turn and chosen.value != "wild" and chosen.value != top.value:
+                                    game_message = "values must match"
+                                    break 
 
-                                        if chosen.value in ["wild", "+4"]:
-                                            game_state = "choosing_color" # Use state instead of variable
-                                            wild_color_waiting = chosen 
-                                    
-                                    game_message = "Play another same value card or click "
-                                    break  #stop loop for any valid card play
+                                player.hand.pop(idx)    #get the index of the card 
+                                pile.append(chosen) #add card obj to pile
+                                card_played_this_turn = True 
+                                game_message = "Played! stack or end!"
 
+                                if chosen.value in ["+2", "+4"]:    #+2 penalty
+                                    _, pending_draw, game_message = apply_special_card_effects(chosen, turn, pending_draw) 
+
+                                if chosen.value in ["wild", "+4"]:  #+4 penalty
+                                    game_state = "choosing_color" # Use state instead of variable
+                                    wild_color_waiting = chosen 
+                        
+                                break  #stop loop for any valid card play
+                    
         if not pile:
             if deck:
                 pile.append(deck.pop())
