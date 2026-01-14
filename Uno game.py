@@ -598,6 +598,7 @@ def main():
         if game_state == "playing" and turn % 2 != 0:   #computer plays portion
             current_player = computer
             pygame.time.delay(800)
+            pygame.event.pump() #responsive window
             top = pile[-1]
             
             playable_cards = [c for c in computer.hand if is_move_valid(c, top, pending_draw)]
@@ -608,42 +609,41 @@ def main():
                 power_cards = [p for p in playable_cards if p.value in ["+2", "+4"]]
 
                 if pending_draw > 0:    #if penalty on pile, computer tries to play a power card
-                    valid_power_cards = [p for p in power_cards if p.value == top.value]
-                    if valid_power_cards:   #look for a valid power card
-                        chosen_card = valid_power_cards[0]
-                    else:
-                        turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
-                        continue 
+                    valid_power_cards = [p for p in power_cards if p.value == top.value or p.value == "+4"]
+                    chosen_card = valid_power_cards[0] if valid_power_cards else None 
+                else:
+                    chosen_card = normal_cards[0] if normal_cards else power_cards[0]
+                
+                if chosen_card:
+                    if chosen_card.value in ["wild", "+4"]:
+                        new_color = choose_best_color(computer.hand)
+                        chosen_card.color = new_color
+                        base = f"{new_color}_{chosen_card.value}"
 
-                elif normal_cards:
-                    chosen_card = normal_cards[0]
-                else:   #only valid moves are power cards
-                    chosen_card = power_cards[0]
-            
-                computer.hand.remove(chosen_card)
-                pile.append(chosen_card)
-
-                draw_frame(screen)
-                pygame.display.flip()   #see the card computer plays
-                pygame.time.delay(800)
-
-                if chosen_card.value in ["+2", "+4"]:
-                    turn += 1
-                    continue
-
-                if chosen_card.value in ["wild", "+4"]:
-                    turn += 1
-                    new_color = choose_best_color(computer.hand)
-                    chosen_card.color = new_color
+                        chosen_card.image = load_image_by_name(base, size=(80,120))
+                        game_message = f"Computer chose {new_color.upper()}!"
                     
-                    base = f"{new_color}_{chosen_card.value}"
+                    _, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)   #adjust turn place holder
+                    
+                    computer.hand.remove(chosen_card)
+                    pile.append(chosen_card)
+                    game_message = f"Computer played {chosen_card.value}!"
+                    draw_frame(screen)
+                    pygame.display.flip()
+                    pygame.time.delay(2000)
 
-                    chosen_card.image = load_image_by_name(base, size=(80,120))
-                    game_message = f"Computer chose {new_color.upper()}!"
-
-                turn, pending_draw, game_message = apply_special_card_effects(chosen_card, turn, pending_draw)
-            else:   #no valid card, computer draws
+                    turn += 1
+                    card_played_this_turn = False 
+                    
+            else:
                 turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
+                turn += 1
+                card_played_this_turn = False 
+                
+            draw_frame(screen)  #card animation for computer
+            pygame.display.flip()   #see the card computer plays
+
+            break
             
         if game_state == "playing" and current_player is not None:
             status = current_player.valid_win()
@@ -664,3 +664,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
