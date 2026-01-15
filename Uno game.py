@@ -74,8 +74,6 @@ class Card():
         
         base = f"{self.color}_{self.value}" if self.color != "wild" else f"wild_{self.value}"
         img = load_image_by_name(base, size=(80, 120))
-        if img is None:
-            print(f"Image not found for {base}")
         self.image = img
 
     def draw(self, screen, x, y):   #draw cards for the player 
@@ -158,16 +156,16 @@ def find_normal_Card(deck, top_card):
     matches = [c for c in deck if Card.is_match(c, top_card)]
     return matches[0] if matches else None 
 
-def apply_special_card_effects(card, turn, pending_draw):
+def apply_special_card_effects(card, pending_draw):
     if card.value == "skip":
-        return turn + 2, pending_draw, f"Skip! Player {turn % 2} was skipped" 
+        return pending_draw, f"Skip! Player was skipped" 
     elif card.value == "reverse":
-        return turn - 1, pending_draw, "Reverse .. reverse! It's your turn now!"
+        return pending_draw, "Reverse .. reverse! It's your turn now!"
     elif card.value == "+2":
-        return turn, pending_draw + 2, "Draw 2!"
+        return pending_draw + 2, "Draw 2!"
     elif card.value == "+4":
-        return turn, pending_draw + 4, "Wild Draw 4!"
-    return turn+1, pending_draw, ""
+        return pending_draw + 4, "Wild Draw 4!"
+    return pending_draw, ""
 
 def draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame, max_draw=50):
     draws = 0
@@ -179,7 +177,6 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_fra
     while draws < max_draw: 
         pygame.event.pump() #prevent freezing
         if not deck:
-            print("deck empty. reshuffling!")
             reshuffle_pile_into_deck(pile, deck)
             if not deck: break 
         
@@ -235,12 +232,8 @@ def generate_deck():    #random deck for the player
     return deck 
 
 def check_deck(deck):
-    print(f"Total cards: {len(deck)}")
-
     card_count = Counter((card.color, card.value) for card in deck)
-
-    for card, count in sorted(card_count.items()):
-        print(f"{card}: {count}") 
+ 
 
 def shuffle_deck(deck): #shuffle deck before new game 
     shuffled_deck = random.shuffle(deck) 
@@ -457,18 +450,17 @@ def main():
     card_played_this_turn = False 
 
     while running:
+        current_player = player 
         if game_state == "playing":
             if turn % 2 == 0: # player's turn
-                current_player = player 
                 if last_turn != turn:
                     card_played_this_turn = False 
                     last_turn = turn 
                     game_message = "Your turn!"                        
-                    print(F"Turn rest. card played was reseted to {card_played_this_turn}")
                 else:
-                    current_player = computer 
                     if last_turn != turn:
                         last_turn = turn 
+                        game_message = "computer is thinking...Playing..."
         
         #refresh the drawing after every frame
         draw_frame(screen)
@@ -490,19 +482,21 @@ def main():
                 mx, my = event.pos
                 if game_state == "choose_first":
                     if ui_buttons["player_first"].collidepoint(mx, my):
-                        turn = 0
                         game_state = "playing"
+                        turn = 0
+                        current_player = player 
+                        continue 
                     elif ui_buttons["computer_first"].collidepoint(mx, my):
+                        game_state = "playing"
                         turn = 1
                         current_player = computer
-                        game_state = "playing"
-                    continue 
+                        continue  
                 
                 #end game
                 elif game_state == "game_over": 
                     mx, my = event.pos 
                     if ui_buttons["restart"].collidepoint(mx, my):
-                        main()  #restart game loop
+                        running = False  #restart game loop
                         return 
 
                 #choose color
@@ -510,13 +504,16 @@ def main():
                     mx, my = event.pos
                     for color, rect in color_buttons.items():
                         if rect.collidepoint(mx, my):
-                            wild_color_waiting.color = color 
+                            top_card = pile[-1]
+                            top_card.color = color 
+                            base = f"{color}_{top_card.value}"
 
-                            base = f"{color}_{wild_color_waiting.value}"
-                            wild_color_waiting.image = load_image_by_name(base, size=(80,120))
+                            new_img = load_image_by_name(base, size=(80, 120))
+                            if new_img:
+                                top_card.image = new_img 
 
+                            pending_draw, game_message = apply_special_card_effects(pile[-1], pending_draw)
                             wild_color_waiting = None 
-                            _, pending_draw, game_message = apply_special_card_effects(pile[-1], turn, pending_draw)
                             turn += 1
                             game_state = "playing"
                             break 
@@ -565,8 +562,6 @@ def main():
                         if r.collidepoint(mx, my):
                             chosen = player.hand[idx]
                             top = pile[-1]
-                            print(f"clicked: {chosen}, top: {top}, played: {card_played_this_turn}")                                
-
                                         
                             if is_move_valid(chosen, top, pending_draw):    #allows penalty stacking
                                 if card_played_this_turn and chosen.value != "wild" and chosen.value != top.value:
@@ -578,8 +573,14 @@ def main():
                                 card_played_this_turn = True 
                                 game_message = "Played! stack or end!"
 
+                                if chosen.value in ["skip", "reverse"]:
+                                    pending_draw, game_message = apply_special_card_effects(chosen, pending_draw)
+                                    turn += 2 #2 player game so skip and reverse are the same 
+                                
                                 if chosen.value in ["+2", "+4"]:    #+2 penalty
-                                    _, pending_draw, game_message = apply_special_card_effects(chosen, turn, pending_draw) 
+                                    pending_draw, game_message = apply_special_card_effects(chosen, pending_draw) 
+                                    game_message = f"Stack a {chosen.value} or end turn!!"
+                                    turn += 1
 
                                 if chosen.value in ["wild", "+4"]:  #+4 penalty
                                     game_state = "choosing_color" # Use state instead of variable
@@ -597,7 +598,7 @@ def main():
 
         if game_state == "playing" and turn % 2 != 0:   #computer plays portion
             current_player = computer
-            pygame.time.delay(800)
+            pygame.time.delay(2000)
             pygame.event.pump() #responsive window
             top = pile[-1]
             
@@ -622,28 +623,33 @@ def main():
 
                         chosen_card.image = load_image_by_name(base, size=(80,120))
                         game_message = f"Computer chose {new_color.upper()}!"
+                        turn += 1
+                        card_played_this_turn = False 
+                        continue
+
+                    if chosen_card.value in ["skip", "reverse"]:
+                        pending_draw, game_message = apply_special_card_effects(chosen_card, pending_draw) 
+                        turn += 2
                     
-                    _, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)   #adjust turn place holder
-                    
+                    pending_draw, game_message = apply_special_card_effects(chosen_card, pending_draw)
                     computer.hand.remove(chosen_card)
                     pile.append(chosen_card)
                     game_message = f"Computer played {chosen_card.value}!"
                     draw_frame(screen)
                     pygame.display.flip()
                     pygame.time.delay(2000)
-
-                    turn += 1
-                    card_played_this_turn = False 
                     
+                    turn += 1
+                    continue    #leave computer's turn
+            
             else:
-                turn, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
+                _, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
+                game_message = "Computer drew cards. "
                 turn += 1
-                card_played_this_turn = False 
-                
-            draw_frame(screen)  #card animation for computer
-            pygame.display.flip()   #see the card computer plays
-
-            break
+            
+            draw_frame(screen)
+            pygame.display.flip()
+            card_played_this_turn = False 
             
         if game_state == "playing" and current_player is not None:
             status = current_player.valid_win()
