@@ -18,3 +18,7 @@ A fully functional, 2 player uno game built with Python and pygame package. This
 Language: Python
 Library: Pygame
 Deployment: PyInstaller
+
+💻 Compatibility Note
+Windows Users: Can run the pre-built uno_game.exe in the dist/ folder.
+Mac/Linux Users: Please run the game via the source code using python uno_game.py (requires Python and Pygame installed).
