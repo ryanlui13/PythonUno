@@ -1,6 +1,20 @@
 Python UNO 
 A fully functional, 2 player uno game built with Python and pygame package. This game uses a state-driven game engine, automated computer logic and an executable distribution. 
 
+💻 Compatibility Note
+Windows Users: Can run the pre-built uno_game.exe in the dist/ folder.
+Mac/Linux Users: Please run the game via the source code using python uno_game.py (requires Python and Pygame installed).
+
+How to run the program (error messages)
+1)Download from https://www.google.com/search?q=https://github.com/ryanlui13/PythonUno/releases. Click "uno_game.exe" file.
+2)security note: This is independent project. It might be flagges as unrecognized.
+3)in BROWSER: If the download pauses, click the "..." and choose "Keep"
+4)In windows: When the .exe file runs, if a ble "Windows protected your PC" box appears, clikc "More Indo" and run anyway.
+5)Playing: no installation is needed. Just use the .exe file and everything should work
+
+DURING GAME:
+1)Game auto restarts a new round once someone won and has 0 cards. If the screen celars and you see 7 new cards, someone won!
+
 🚀 Key Features
 1) Intelligent Computer AI: The computer opponent uses logic heuristics to choose the best color (for wild and +4 cards) and stack penalty cards.
 2) State-Driven Game Loop: Managed complex game transitions including turn-taking, color selection, and "UNO" declaration phases.
@@ -18,7 +32,3 @@ A fully functional, 2 player uno game built with Python and pygame package. This
 Language: Python
 Library: Pygame
 Deployment: PyInstaller
-
-💻 Compatibility Note
-Windows Users: Can run the pre-built uno_game.exe in the dist/ folder.
-Mac/Linux Users: Please run the game via the source code using python uno_game.py (requires Python and Pygame installed).
