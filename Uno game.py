@@ -350,7 +350,8 @@ def main():
     clock = pygame.time.Clock()
 
     #scenery. Colors for the background
-    TABLE_BLUE = (25, 25, 112)
+    WHITE = (255, 255, 255)
+    TABLE_BLUE = (10, 25, 47)
 
     #images
     card_back_surf = load_image_by_name("card_back", size=(80, 120))
@@ -398,7 +399,7 @@ def main():
     def draw_message(screen, font, message):
         if not message:
             return 
-        text_surf = font.render(message, True, (0, 0, 0))
+        text_surf = font.render(message, True, (255, 255, 255))
         pos_x = screen.get_width() // 2 - text_surf.get_width()//2
         pos_y = 20
         
@@ -670,4 +671,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
