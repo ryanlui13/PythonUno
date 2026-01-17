@@ -1,6 +1,14 @@
 import os 
 import pygame 
 import random 
+import sys 
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+IMAGES_DIR = os.path.join(BASE_DIR, "images")
 
 pygame.init()
 
@@ -704,6 +712,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
