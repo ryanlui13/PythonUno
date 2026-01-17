@@ -373,7 +373,11 @@ def main():
     #draw the frame
     def draw_frame(surf):
         surf.fill(TABLE_BLUE)
-        surf.blit(shared_deck_surf, (shared_pos[0]-200, shared_pos[1]-20))  #deck, left of center
+        if shared_deck_surf is not None:
+            surf.blit(shared_deck_surf, DECK_POS)  #deck, left of center
+        else:
+            pygame.draw.rect(surf, (100, 100, 100), (deck_x, deck_y, 80, 120))
+        
         draw_pile(surf, pile, center=(shared_pos[0], shared_pos[1]))
         
         draw_hand(surf, player.hand, 50, 520, 30, card_back_surf, show_face=True)
@@ -513,10 +517,12 @@ def main():
                             if new_img:
                                 top_card.image = new_img 
 
-                            pending_draw, game_message = apply_special_card_effects(pile[-1], pending_draw)
-                            wild_color_waiting = None 
-                            turn += 1
+                            pending_draw, game_message = apply_special_card_effects(top_card, pending_draw)
                             game_state = "playing"
+                            wild_color_waiting = None 
+
+                            turn += 1
+                            card_played_this_turn = False 
                             break 
                 
                 #uno game
@@ -548,13 +554,12 @@ def main():
                         if card_played_this_turn and pending_draw == 0:
                             turn += 1
                             card_played_this_turn = False 
-                            game_message = "Computer turn"
+                            game_message = "Computer turn" 
                             continue 
 
                     if deck_rect.collidepoint(mx, my) and not card_played_this_turn:
                         turn, pending_draw, game_message = draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_frame)    #draw the card
                         card_played_this_turn = True 
-                        turn += 1
                         game_message = "You drew cards. the computer goes now..."
                         continue 
                             
@@ -577,18 +582,25 @@ def main():
                                 if chosen.value in ["skip", "reverse"]:
                                     pending_draw, game_message = apply_special_card_effects(chosen, pending_draw)
                                     turn += 2 #2 player game so skip and reverse are the same 
+                                    card_played_this_turn = False #reset for next turn
+                                    continue 
                                 
-                                if chosen.value in ["+2", "+4"]:    #+2 penalty
+                                elif chosen.value == "+2":    #+2 penalty
                                     pending_draw, game_message = apply_special_card_effects(chosen, pending_draw) 
                                     game_message = f"Stack a {chosen.value} or end turn!!"
-                                    turn += 1
 
-                                if chosen.value in ["wild", "+4"]:  #+4 penalty
-                                    game_state = "choosing_color" # Use state instead of variable
-                                    wild_color_waiting = chosen 
-                        
-                                break  #stop loop for any valid card play
-                    
+                                elif chosen.value in ["wild", "+4"]:    #+2 penalty
+                                    game_state = "choosing_color"
+                                    wild_color_waiting = chosen
+                                    if chosen.value == "+4":
+                                        pending_draw, game_message = apply_special_card_effects(chosen, pending_draw) 
+                                    game_message = f"Stack a {chosen.value} or end turn!!"
+                                    break 
+                                
+                                else:   #normal card logic covered above (1st case) and allow stacking
+                                    pass 
+
+                                            
         if not pile:
             if deck:
                 pile.append(deck.pop())
@@ -599,7 +611,7 @@ def main():
 
         if game_state == "playing" and turn % 2 != 0:   #computer plays portion
             current_player = computer
-            pygame.time.delay(2000)
+            pygame.time.delay(1000)
             pygame.event.pump() #responsive window
             top = pile[-1]
             
@@ -609,14 +621,35 @@ def main():
                 #separate normal cards from +2 and +4
                 normal_cards = [c for c in playable_cards if c.value not in ["+2", "+4"]]
                 power_cards = [p for p in playable_cards if p.value in ["+2", "+4"]]
+                chosen_card = None 
 
                 if pending_draw > 0:    #if penalty on pile, computer tries to play a power card
                     valid_power_cards = [p for p in power_cards if p.value == top.value or p.value == "+4"]
-                    chosen_card = valid_power_cards[0] if valid_power_cards else None 
+                    if valid_power_cards:
+                        chosen_card = valid_power_cards[0]
+                    else:
+                        for i in range(pending_draw):
+                            if deck:
+                                computer.hand.append(deck.pop())
+                                draw_frame(screen)
+                                pygame.display.flip()
+                                pygame.time.delay(1000)
+                        
+                        pending_draw = 0
+                        turn += 1
+                        card_played_this_turn = False 
+                        continue 
                 else:
                     chosen_card = normal_cards[0] if normal_cards else power_cards[0]
                 
                 if chosen_card:
+                    computer.hand.remove(chosen_card)
+                    pile.append(chosen_card)
+                    draw_frame(screen)
+                    pygame.display.flip()
+                    pygame.time.delay(2000)
+                    game_message = f"Computer played {chosen_card.value}!"
+
                     if chosen_card.value in ["wild", "+4"]:
                         new_color = choose_best_color(computer.hand)
                         chosen_card.color = new_color
@@ -624,27 +657,27 @@ def main():
 
                         chosen_card.image = load_image_by_name(base, size=(80,120))
                         game_message = f"Computer chose {new_color.upper()}!"
+                        if chosen_card.value == "+4":
+                            pending_draw, _ = apply_special_card_effects(chosen_card, pending_draw)
+                        
                         turn += 1
                         card_played_this_turn = False 
-                        continue
 
-                    if chosen_card.value in ["skip", "reverse"]:
-                        pending_draw, game_message = apply_special_card_effects(chosen_card, pending_draw) 
+                    elif chosen_card.value in ["skip", "reverse"]:
+                        pending_draw, _ = apply_special_card_effects(chosen_card, pending_draw) 
                         turn += 2
+
+                    else:   #normal & +2 
+                        pending_draw, _ = apply_special_card_effects(chosen_card, pending_draw)
+                        turn += 1
+                        card_played_this_turn = False 
                     
-                    pending_draw, game_message = apply_special_card_effects(chosen_card, pending_draw)
-                    computer.hand.remove(chosen_card)
-                    pile.append(chosen_card)
-                    game_message = f"Computer played {chosen_card.value}!"
-                    draw_frame(screen)
-                    pygame.display.flip()
-                    pygame.time.delay(2000)
-                    
-                    turn += 1
+                    card_played_this_turn = False 
                     continue    #leave computer's turn
             
             else:
                 _, pending_draw, game_message = draw_until_playable(computer, pile, deck, turn, pending_draw, screen, draw_frame)
+                pending_draw = 0
                 game_message = "Computer drew cards. "
                 turn += 1
             
@@ -671,5 +704,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
