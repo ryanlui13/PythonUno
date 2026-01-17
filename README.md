@@ -6,7 +6,7 @@ Windows Users: Can run the pre-built uno_game.exe in the dist/ folder.
 Mac/Linux Users: Please run the game via the source code using python uno_game.py (requires Python and Pygame installed).
 
 How to run the program (error messages)
-1)Download from https://www.google.com/search?q=https://github.com/ryanlui13/PythonUno/releases. Click "uno_game.exe" file.
+1)Download from https://github.com/ryanlui13/PythonUno/releases. Click "uno_game.exe" file.
 2)security note: This is independent project. It might be flagges as unrecognized.
 3)in BROWSER: If the download pauses, click the "..." and choose "Keep"
 4)In windows: When the .exe file runs, if a ble "Windows protected your PC" box appears, clikc "More Indo" and run anyway.
