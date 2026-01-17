@@ -16,7 +16,7 @@ DURING GAME:
 1)Game auto restarts a new round once someone won and has 0 cards. If the screen celars and you see 7 new cards, someone won!
 
 🚀 Key Features
-1) Intelligent Computer AI: The computer opponent uses logic heuristics to choose the best color (for wild and +4 cards) and stack penalty cards.
+1) Intelligent Computer AI: The computer opponent uses logic heuristics to choose the best color (for wild and +4 cards) and stack penalty cards.Identified a state collision where the computer skipping the pending draw penalty. Implemented a forced drawing loop to ensure game is fair. 
 2) State-Driven Game Loop: Managed complex game transitions including turn-taking, color selection, and "UNO" declaration phases.
 3) Penalty Stacking: Supports stacking mechanics for +2 and +4 cards, increasing the "Pending Draw" pool. This is a normal rule for playing uno
 4) Standalone Distribution: Packaged into a portable .exe using PyInstaller. All assets are grouped togeher for easy play.
