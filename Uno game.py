@@ -209,7 +209,6 @@ def draw_until_playable(player, pile, deck, turn, pending_draw, screen, draw_fra
     msg = f"{player.name} drew {max_draw} cards. no match was found"
     return turn + 1, 0, msg 
 
-
 def is_move_valid(chosen_card, top_card,pending_draw):
     if pending_draw > 0:
         if top_card.value == "+2":
@@ -228,7 +227,7 @@ def generate_deck():    #random deck for the player
     deck = []
     for color in colors:
         deck.append(Card(color, "0"))   #add 2 0s
-        for value in values[1:9]:   
+        for value in values[1:]:   
             deck.append(Card(color, value))
             deck.append(Card(color, value))
 
@@ -244,8 +243,8 @@ def check_deck(deck):
  
 
 def shuffle_deck(deck): #shuffle deck before new game 
-    shuffled_deck = random.shuffle(deck) 
-    return shuffled_deck 
+    random.shuffle(deck) 
+    return deck 
 
 def reshuffle_pile_into_deck(pile, deck):
     if len(pile) <= 1:
@@ -407,7 +406,7 @@ def main():
             deck.insert(0, first_card)  #put the card back into deck
             random.shuffle(deck)
         
-    game_message = "Your upp!"
+    game_message = "Your up!"
     def draw_message(screen, font, message):
         if not message:
             return 
@@ -471,8 +470,6 @@ def main():
                     last_turn = turn 
                     game_message = "Your turn!"                        
                 else:
-                    if last_turn != turn:
-                        last_turn = turn 
                         game_message = "computer is thinking...Playing..."
         
         #refresh the drawing after every frame
@@ -525,7 +522,8 @@ def main():
                             if new_img:
                                 top_card.image = new_img 
 
-                            pending_draw, game_message = apply_special_card_effects(top_card, pending_draw)
+                            if top_card.value == "wild":
+                                pending_draw, game_message = apply_special_card_effects(top_card, pending_draw)
                             game_state = "playing"
                             wild_color_waiting = None 
 
@@ -653,10 +651,11 @@ def main():
                 if chosen_card:
                     computer.hand.remove(chosen_card)
                     pile.append(chosen_card)
+                    game_message = f"Computer played {chosen_card.value}!"
                     draw_frame(screen)
+                    draw_message(screen, font, game_message)
                     pygame.display.flip()
                     pygame.time.delay(2000)
-                    game_message = f"Computer played {chosen_card.value}!"
 
                     if chosen_card.value in ["wild", "+4"]:
                         new_color = choose_best_color(computer.hand)
@@ -665,6 +664,10 @@ def main():
 
                         chosen_card.image = load_image_by_name(base, size=(80,120))
                         game_message = f"Computer chose {new_color.upper()}!"
+                        draw_frame(screen)
+                        draw_message(screen, font, game_message)
+                        pygame.display.flip()
+                        pygame.time.delay(2000)
                         if chosen_card.value == "+4":
                             pending_draw, _ = apply_special_card_effects(chosen_card, pending_draw)
                         
@@ -712,7 +715,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
