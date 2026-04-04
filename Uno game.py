@@ -387,8 +387,9 @@ def main():
         
         draw_pile(surf, pile, center=(shared_pos[0], shared_pos[1]))
         
-        draw_hand(surf, player.hand, 50, 520, 30, card_back_surf, show_face=True)
+        p_rects = draw_hand(surf, player.hand, 50, 520, 30, card_back_surf, show_face=True)
         draw_hand(surf, computer.hand, 50, 50, 50, card_back_surf, show_face=False)
+        return p_rects
 
     deal_cards_with_animation(screen, deck, player, computer, (shared_pos[0]-200, shared_pos[1]-20), card_back_surf, draw_frame, player_start_pos=(shared_pos[0], shared_pos[1]), computer_start_pos=(shared_pos[0], shared_pos[1]), card_spacing=30)
     if deck:
@@ -464,17 +465,18 @@ def main():
     while running:
         current_player = player 
         if game_state == "playing":
-            if turn % 2 == 0: # player's turn
+            if turn % 2 == 0:  # player's turn
                 if last_turn != turn:
                     card_played_this_turn = False 
                     last_turn = turn 
-                    game_message = "Your turn!"                        
-                else:
-                        game_message = "computer is thinking...Playing..."
+                    game_message = "Your turn!"
+            elif turn % 2 != 0:  # computer's turn
+                if last_turn != turn:
+                    last_turn = turn
+                    game_message = "Computer is thinking..."
         
         #refresh the drawing after every frame
-        draw_frame(screen)
-        player_rects = draw_hand(screen, player.hand, 50, 520, 30, card_back_surf, show_face=True)
+        player_rects = draw_frame(screen)
         draw_message(screen, font, game_message)
         active_buttons = draw_ui(screen, game_state, font, ui_buttons)
         if game_state == "choosing_color":
@@ -655,7 +657,7 @@ def main():
                     draw_frame(screen)
                     draw_message(screen, font, game_message)
                     pygame.display.flip()
-                    pygame.time.delay(2000)
+                    pygame.time.delay(1500)
 
                     if chosen_card.value in ["wild", "+4"]:
                         new_color = choose_best_color(computer.hand)
@@ -664,13 +666,14 @@ def main():
 
                         chosen_card.image = load_image_by_name(base, size=(80,120))
                         game_message = f"Computer chose {new_color.upper()}!"
+                        if chosen_card.value == "+4":
+                            pending_draw, _ = apply_special_card_effects(chosen_card, pending_draw)
+
                         draw_frame(screen)
                         draw_message(screen, font, game_message)
                         pygame.display.flip()
-                        pygame.time.delay(2000)
-                        if chosen_card.value == "+4":
-                            pending_draw, _ = apply_special_card_effects(chosen_card, pending_draw)
-                        
+                        pygame.time.delay(1500)
+
                         turn += 1
                         card_played_this_turn = False 
 
